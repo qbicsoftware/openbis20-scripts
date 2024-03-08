@@ -4,7 +4,7 @@
     <Console name="Console" target="SYSTEM_OUT">
       <PatternLayout pattern="[%d{HH:mm:ss.SSS}] %msg%n"/>
     </Console>
-    <File append="true" fileName="logs/postman-all.log" immediateFlush="false" name="MyFile">
+    <File append="true" fileName="logs/openbis-scripts-all.log" immediateFlush="false" name="MyFile">
       <PatternLayout pattern="%d{yyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
     </File>
   </Appenders>

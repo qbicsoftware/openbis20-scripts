@@ -6,7 +6,7 @@
     <groupId>life.qbic</groupId>
     <artifactId>openbis-scripts</artifactId>
     <version>1.0.0</version>
-    <name>Postman cli</name>
+    <name>OpenBis Scripts</name>
     <url>https://github.com/qbicsoftware/openbis20-scripts</url>
     <description>A client software written in Java to query openBIS</description>
     <packaging>jar</packaging>

@@ -1,6 +1,5 @@
 package life.qbic;
 
-import life.qbic.io.commandline.OpenBISPasswordParser;
 import life.qbic.io.commandline.CommandLineOptions;
 import life.qbic.model.Configuration;
 import life.qbic.model.download.Authentication;
@@ -12,10 +11,9 @@ import picocli.CommandLine;
 
 import java.io.File;
 import java.util.Arrays;
-import java.util.Optional;
 
 /**
- * postman for staging data from openBIS
+ * Scripts to perform different openBIS queries
  */
 public class App {
 
