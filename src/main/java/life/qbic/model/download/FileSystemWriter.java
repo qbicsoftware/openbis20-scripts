@@ -1,6 +1,9 @@
 package life.qbic.model.download;
 
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -11,29 +14,40 @@ import java.util.List;
  *
  * @author: Sven Fillinger, Andreas Friedrich
  */
-class FileSystemWriter implements ModelReporter {
+public class FileSystemWriter implements ModelReporter {
 
   /**
    * File that stores the summary report content for valid checksums.
    */
-  final private File matchingSummaryFile;
+  final private File summaryFile;
 
 
   /**
-   * FileSystemWriter constructor with the paths for the summary files.     *
+   * FileSystemWriter constructor with the paths for the summary files.
    *
-   * @param matchingSummaryFile The path where to write the summary
+   * @param summaryFile The path where to write the summary
    */
-  FileSystemWriter(Path matchingSummaryFile) {
-    this.matchingSummaryFile = new File(matchingSummaryFile.toString());
+  public FileSystemWriter(Path summaryFile) {
+    this.summaryFile = new File(summaryFile.toString());
   }
 
   /**
    * {@inheritDoc}
    */
   @Override
-  public void reportSummary(List<String> summary) {
-    //TODO
+  public void reportSummary(List<String> summary) throws IOException {
+    if (!summaryFile.exists()) {
+      summaryFile.createNewFile();
+      //file exists or could not be created
+      if (!summaryFile.exists()) {
+        throw new IOException("The file " + summaryFile.getAbsoluteFile() + " could not be created.");
+      }
+    }
+    BufferedWriter writer = new BufferedWriter(new FileWriter(summaryFile, true));
+    for(String line : summary) {
+      writer.append(line+"\n");
+    }
+    writer.close();
   }
 
 }

@@ -10,14 +10,10 @@ import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.Space;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.fetchoptions.SpaceFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.search.SpaceSearchCriteria;
 import ch.systemsx.cisd.common.spring.HttpInvokerUtils;
-import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import life.qbic.App;
-import life.qbic.model.Configuration;
 import life.qbic.model.SampleTypeConnection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,11 +23,6 @@ public class OpenbisConnector {
   private static final Logger LOG = LogManager.getLogger(OpenbisConnector.class);
   private final IApplicationServerApi applicationServer;
   private final String sessionToken;
-  private final String outputPath;
-
-  private final ModelReporter modelReporter = new FileSystemWriter(
-      Paths.get(Configuration.LOG_PATH.toString(), "summary_model.txt"));
-
   /**
    * Constructor for a QBiCDataDownloader instance
    *
@@ -40,10 +31,8 @@ public class OpenbisConnector {
    */
   public OpenbisConnector(
           String AppServerUri,
-          String sessionToken,
-          String outputPath) {
+          String sessionToken) {
     this.sessionToken = sessionToken;
-    this.outputPath = outputPath;
 
     if (!AppServerUri.isEmpty()) {
       applicationServer =
