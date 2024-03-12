@@ -17,31 +17,61 @@
     <spring.version>5.3.31</spring.version>
   </properties>
 
-  <!-- we only need to tell maven where to find our parent pom and other QBiC dependencies -->
   <repositories>
-      <!-- The order of definitions matters. Explicitly defining central here to make sure it has the highest priority. -->
-      <!-- Main Maven repository -->
-      <repository>
-        <id>central</id>
-        <url>https://repo.maven.apache.org/maven2</url>
-        <snapshots>
-          <enabled>false</enabled>
-        </snapshots>
-      </repository>
-      <repository>
-        <id>nexus-releases</id>
-        <name>QBiC Releases</name>
-        <releases>
-          <checksumPolicy>fail</checksumPolicy>
-          <enabled>true</enabled>
-          <updatePolicy>always</updatePolicy>
-        </releases>
-        <snapshots>
-          <enabled>false</enabled>
-        </snapshots>
-        <url>https://qbic-repo.qbic.uni-tuebingen.de/repository/maven-releases</url>
-      </repository>
+    <repository>
+      <releases>
+        <enabled>true</enabled>
+        <updatePolicy>always</updatePolicy>
+        <checksumPolicy>fail</checksumPolicy>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <id>maven-central</id>
+      <name>Maven central</name>
+      <url>https://repo.maven.apache.org/maven2</url>
+    </repository>
+    <repository>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+        <updatePolicy>always</updatePolicy>
+        <checksumPolicy>fail</checksumPolicy>
+      </snapshots>
+      <id>nexus-snapshots</id>
+      <name>QBiC Snapshots</name>
+      <url>https://qbic-repo.qbic.uni-tuebingen.de/repository/maven-snapshots</url>
+    </repository>
+    <repository>
+      <releases>
+        <enabled>true</enabled>
+        <updatePolicy>always</updatePolicy>
+        <checksumPolicy>fail</checksumPolicy>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <id>nexus-releases</id>
+      <name>QBiC Releases</name>
+      <url>https://qbic-repo.qbic.uni-tuebingen.de/repository/maven-releases</url>
+    </repository>
   </repositories>
+  <distributionManagement>
+    <repository>
+      <uniqueVersion>true</uniqueVersion>
+      <id>nexus-releases</id>
+      <name>QBiC Releases</name>
+      <url>https://qbic-repo.qbic.uni-tuebingen.de/repository/maven-releases</url>
+    </repository>
+    <snapshotRepository>
+      <uniqueVersion>false</uniqueVersion>
+      <id>nexus-snapshots</id>
+      <name>QBiC Snapshots</name>
+      <url>https://qbic-repo.qbic.uni-tuebingen.de/repository/maven-snapshots</url>
+    </snapshotRepository>
+  </distributionManagement>
 
   <dependencies>
     <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core -->
