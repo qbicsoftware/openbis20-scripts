@@ -1,6 +1,6 @@
 package life.qbic.model.download;
 
-import ch.ethz.sis.openbis.generic.asapi.v3.IApplicationServerApi;
+import ch.ethz.sis.openbis.generic.OpenBIS;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.common.search.SearchResult;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.SampleType;
@@ -9,7 +9,6 @@ import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.search.SampleSearchCriter
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.Space;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.fetchoptions.SpaceFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.search.SpaceSearchCriteria;
-import ch.systemsx.cisd.common.spring.HttpInvokerUtils;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,8 +20,7 @@ import org.apache.logging.log4j.Logger;
 public class OpenbisConnector {
 
   private static final Logger LOG = LogManager.getLogger(OpenbisConnector.class);
-  private final IApplicationServerApi applicationServer;
-  private final String sessionToken;
+  OpenBIS openBIS;
   /**
    * Constructor for a QBiCDataDownloader instance
    *
@@ -32,6 +30,7 @@ public class OpenbisConnector {
   public OpenbisConnector(
           String AppServerUri,
           String sessionToken) {
+    /*
     this.sessionToken = sessionToken;
 
     if (!AppServerUri.isEmpty()) {
@@ -41,12 +40,18 @@ public class OpenbisConnector {
     } else {
       applicationServer = null;
     }
+
+     */
+  }
+
+  public OpenbisConnector(OpenBIS authentication) {
+    this.openBIS = authentication;
   }
 
   public List<String> getSpaces() {
     SpaceSearchCriteria criteria = new SpaceSearchCriteria();
     SpaceFetchOptions options = new SpaceFetchOptions();
-    return applicationServer.searchSpaces(sessionToken, criteria, options).getObjects()
+    return openBIS.searchSpaces(criteria, options).getObjects()
         .stream().map(Space::getCode).collect(Collectors.toList());
   }
 
@@ -63,8 +68,7 @@ public class OpenbisConnector {
       withDescendants.withType();
       SampleSearchCriteria criteria = new SampleSearchCriteria();
       criteria.withSpace().withCode().thatEquals(space.toUpperCase());
-      SearchResult<Sample> result = applicationServer.searchSamples(
-          sessionToken, criteria, withDescendants);
+      SearchResult<Sample> result = openBIS.searchSamples(criteria, withDescendants);
       for (Sample s : result.getObjects()) {
           SampleType parentType = s.getType();
           List<Sample> children = s.getChildren();
