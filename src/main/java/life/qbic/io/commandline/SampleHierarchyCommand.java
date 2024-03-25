@@ -1,5 +1,6 @@
 package life.qbic.io.commandline;
 
+import ch.ethz.sis.openbis.generic.OpenBIS;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -43,8 +44,8 @@ public class SampleHierarchyCommand implements Runnable {
         } else {
           summary.add("Querying samples in all available spaces...\n");
         }
-        Authentication authentication = App.loginToOpenBIS(auth.getPassword(), auth.user, auth.as_url);
-        OpenbisConnector openbis = new OpenbisConnector(auth.as_url, authentication.getSessionToken());
+        OpenBIS authentication = App.loginToOpenBIS(auth.getPassword(), auth.user, auth.as_url);
+        OpenbisConnector openbis = new OpenbisConnector(authentication);
         Map<SampleTypeConnection, Integer> hierarchy = openbis.queryFullSampleHierarchy(spaces);
 
         hierarchy.entrySet().stream()

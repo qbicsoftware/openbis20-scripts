@@ -1,5 +1,6 @@
 package life.qbic;
 
+import ch.ethz.sis.openbis.generic.OpenBIS;
 import life.qbic.io.commandline.CommandLineOptions;
 import life.qbic.model.Configuration;
 import life.qbic.model.download.Authentication;
@@ -39,8 +40,8 @@ public class App {
    *
    * @return An instance of the Authentication class.
    */
-  public static Authentication loginToOpenBIS(
-      char[] password, String user, String as_url) {
+  public static OpenBIS loginToOpenBIS(
+      char[] password, String user, String url) {
 
     // Ensure 'logs' folder is created
     File logFolder = new File(Configuration.LOG_PATH.toAbsolutePath().toString());
@@ -52,13 +53,10 @@ public class App {
       }
     }
 
-    Authentication authentication =
-            new Authentication(
-                    user,
-                    new String(password),
-                    as_url);
+    OpenBIS authentication =
+            new OpenBIS(url);
     try {
-      authentication.login();
+      authentication.login(user, new String(password));
     } catch (ConnectionException e) {
       LOG.error(e.getMessage(), e);
       LOG.error("Could not connect to QBiC's data source. Have you requested access to the "
