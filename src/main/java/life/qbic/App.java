@@ -3,7 +3,6 @@ package life.qbic;
 import ch.ethz.sis.openbis.generic.OpenBIS;
 import life.qbic.io.commandline.CommandLineOptions;
 import life.qbic.model.Configuration;
-import life.qbic.model.download.Authentication;
 import life.qbic.model.download.AuthenticationException;
 import life.qbic.model.download.ConnectionException;
 import org.apache.logging.log4j.LogManager;
@@ -36,25 +35,34 @@ public class App {
   }
 
   /**
-   * Logs into OpenBIS asks for and verifies password.
+   * Logs into OpenBIS, asks for and verifies password.
    *
    * @return An instance of the Authentication class.
    */
   public static OpenBIS loginToOpenBIS(
       char[] password, String user, String url) {
+    //setupLog();
 
-    // Ensure 'logs' folder is created
-    File logFolder = new File(Configuration.LOG_PATH.toAbsolutePath().toString());
-    if (!logFolder.exists()) {
-      boolean logFolderCreated = logFolder.mkdirs();
-      if (!logFolderCreated) {
-        LOG.error("Could not create log folder '" + logFolder.getAbsolutePath() + "'");
-        System.exit(1);
-      }
-    }
+    OpenBIS authentication = new OpenBIS(url);
 
-    OpenBIS authentication =
-            new OpenBIS(url);
+    return tryLogin(authentication, user, password);
+  }
+
+  /**
+   * Logs into OpenBIS, asks for and verifies password, includes Datastore Server connection.
+   *
+   * @return An instance of the Authentication class.
+   */
+  public static OpenBIS loginToOpenBIS(
+      char[] password, String user, String url, String dssUrl) {
+    //setupLog();
+
+    OpenBIS authentication = new OpenBIS(url, dssUrl);
+
+    return tryLogin(authentication, user, password);
+  }
+
+  private static OpenBIS tryLogin(OpenBIS authentication, String user, char[] password) {
     try {
       authentication.login(user, new String(password));
     } catch (ConnectionException e) {
@@ -67,5 +75,17 @@ public class App {
       System.exit(1);
     }
     return authentication;
+  }
+
+  private static void setupLog() {
+    // Ensure 'logs' folder is created
+    File logFolder = new File(Configuration.LOG_PATH.toAbsolutePath().toString());
+    if (!logFolder.exists()) {
+      boolean logFolderCreated = logFolder.mkdirs();
+      if (!logFolderCreated) {
+        LOG.error("Could not create log folder '" + logFolder.getAbsolutePath() + "'");
+        System.exit(1);
+      }
+    }
   }
 }

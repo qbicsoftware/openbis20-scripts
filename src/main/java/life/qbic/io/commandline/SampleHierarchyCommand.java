@@ -15,7 +15,6 @@ import java.util.Map.Entry;
 import life.qbic.App;
 import life.qbic.model.Configuration;
 import life.qbic.model.SampleTypeConnection;
-import life.qbic.model.download.Authentication;
 import life.qbic.model.download.FileSystemWriter;
 import life.qbic.model.download.ModelReporter;
 import life.qbic.model.download.OpenbisConnector;
@@ -44,7 +43,7 @@ public class SampleHierarchyCommand implements Runnable {
         } else {
           summary.add("Querying samples in all available spaces...\n");
         }
-        OpenBIS authentication = App.loginToOpenBIS(auth.getPassword(), auth.user, auth.as_url);
+        OpenBIS authentication = App.loginToOpenBIS(auth.getPassword(), auth.getUser(), auth.getAS());
         OpenbisConnector openbis = new OpenbisConnector(authentication);
         Map<SampleTypeConnection, Integer> hierarchy = openbis.queryFullSampleHierarchy(spaces);
 
