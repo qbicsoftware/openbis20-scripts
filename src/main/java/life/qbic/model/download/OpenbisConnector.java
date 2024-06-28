@@ -44,15 +44,16 @@ public class OpenbisConnector {
 
   private static final Logger LOG = LogManager.getLogger(OpenbisConnector.class);
   OpenBIS openBIS;
+
   /**
    * Constructor for a QBiCDataDownloader instance
    *
-   * @param AppServerUri  The openBIS application server URL (AS)
+   * @param AppServerUri The openBIS application server URL (AS)
    * @param sessionToken The session token for the datastore & application servers
    */
   public OpenbisConnector(
-          String AppServerUri,
-          String sessionToken) {
+      String AppServerUri,
+      String sessionToken) {
     /*
     this.sessionToken = sessionToken;
 
@@ -78,7 +79,8 @@ public class OpenbisConnector {
         .stream().map(Space::getCode).collect(Collectors.toList());
   }
 
-  public DataSetPermId registerDataset(Path uploadPath, String experimentID, List<String> parentCodes) {
+  public DataSetPermId registerDataset(Path uploadPath, String experimentID,
+      List<String> parentCodes) {
     final String uploadId = openBIS.uploadFileWorkspaceDSS(uploadPath);
 
     final UploadedDataSetCreation creation = new UploadedDataSetCreation();
@@ -88,78 +90,75 @@ public class OpenbisConnector {
         Collectors.toList()));
     creation.setTypeId(new EntityTypePermId("UNKNOWN", EntityKind.DATA_SET));
 
-    try
-    {
+    try {
       return openBIS.createUploadedDataSet(creation);
-    } catch (final Exception e)
-    {
-      e.printStackTrace();
+    } catch (final Exception e) {
+      LOG.error(e.getMessage());
     }
     return null;
   }
 
-private static void copyInputStreamToFile(InputStream inputStream, File file)
-    throws IOException {
-  try (FileOutputStream outputStream = new FileOutputStream(file, false)) {
-    int read;
-    byte[] bytes = new byte[8192];
-    while ((read = inputStream.read(bytes)) != -1) {
-      outputStream.write(bytes, 0, read);
+  private static void copyInputStreamToFile(InputStream inputStream, File file)
+      throws IOException {
+    System.err.println(file.getPath());
+    try (FileOutputStream outputStream = new FileOutputStream(file, false)) {
+      int read;
+      byte[] bytes = new byte[8192];
+      while ((read = inputStream.read(bytes)) != -1) {
+        outputStream.write(bytes, 0, read);
+      }
     }
   }
-}
 
-public List<DataSet> listDatasetsOfExperiment(List<String> spaces, String experiment) {
-  DataSetSearchCriteria criteria = new DataSetSearchCriteria();
-  criteria.withExperiment().withCode().thatEquals(experiment);
-  if(!spaces.isEmpty()) {
-    criteria.withAndOperator();
-    criteria.withExperiment().withProject().withSpace().withCodes().thatIn(spaces);
+  public List<DataSet> listDatasetsOfExperiment(List<String> spaces, String experiment) {
+    DataSetSearchCriteria criteria = new DataSetSearchCriteria();
+    criteria.withExperiment().withCode().thatEquals(experiment);
+    if (!spaces.isEmpty()) {
+      criteria.withAndOperator();
+      criteria.withExperiment().withProject().withSpace().withCodes().thatIn(spaces);
+    }
+    DataSetFetchOptions options = new DataSetFetchOptions();
+    options.withType();
+    options.withRegistrator();
+    options.withExperiment().withProject().withSpace();
+    return openBIS.searchDataSets(criteria, options).getObjects();
   }
-  DataSetFetchOptions options = new DataSetFetchOptions();
-  options.withType();
-  options.withRegistrator();
-  options.withExperiment().withProject().withSpace();
-  return openBIS.searchDataSets(criteria, options).getObjects();
-}
 
   public void downloadDataset(String targetPath, String datasetID) throws IOException {
     DataSetFileDownloadOptions options = new DataSetFileDownloadOptions();
     IDataSetFileId fileToDownload = new DataSetFilePermId(new DataSetPermId(datasetID),
-        "");//TODO test this path
+        "");
 
-    // Setting recursive flag to true will return both the subfolder directory object AND file3.txt
+    System.err.println(fileToDownload);
+    // Setting recursive flag to true will return both subfolders and files
     options.setRecursive(true);
 
-    // Setting recursive flag to false will return just the meta data of the directory object
-    //options.setRecursive(false);
-
     // Read the contents and print them out
-    InputStream stream = openBIS.downloadFiles(new ArrayList<>(Arrays.asList(fileToDownload)), options);
+    InputStream stream = openBIS.downloadFiles(new ArrayList<>(List.of(fileToDownload)),
+        options);
     DataSetFileDownloadReader reader = new DataSetFileDownloadReader(stream);
     DataSetFileDownload file = null;
-    while ((file = reader.read()) != null)
-    {
+    while ((file = reader.read()) != null) {
       DataSetFile df = file.getDataSetFile();
-      String currentPath = df.getPath().replace("original","");
-      if(df.isDirectory()) {
-          File newDir = new File(targetPath, currentPath);
-          if (!newDir.exists()) {
-            newDir.mkdirs();
-          }
+      String currentPath = df.getPath().replace("original", "");
+      if (df.isDirectory()) {
+        File newDir = new File(targetPath, currentPath);
+        if (!newDir.exists()) {
+          newDir.mkdirs();
+        }
       } else {
         File toWrite = new File(targetPath, currentPath);
         copyInputStreamToFile(file.getInputStream(), toWrite);
       }
     }
-    }
+  }
 
   public Map<SampleTypeConnection, Integer> queryFullSampleHierarchy(List<String> spaces) {
     Map<SampleTypeConnection, Integer> hierarchy = new HashMap<>();
-    if(spaces.isEmpty()) {
+    if (spaces.isEmpty()) {
       spaces = getSpaces();
     }
-    for(String space : spaces) {
+    for (String space : spaces) {
       SampleFetchOptions fetchType = new SampleFetchOptions();
       fetchType.withType();
       SampleFetchOptions withDescendants = new SampleFetchOptions();
@@ -169,27 +168,27 @@ public List<DataSet> listDatasetsOfExperiment(List<String> spaces, String experi
       criteria.withSpace().withCode().thatEquals(space.toUpperCase());
       SearchResult<Sample> result = openBIS.searchSamples(criteria, withDescendants);
       for (Sample s : result.getObjects()) {
-          SampleType parentType = s.getType();
-          List<Sample> children = s.getChildren();
-          if (children.isEmpty()) {
-            SampleTypeConnection leaf = new SampleTypeConnection(parentType);
-            if (hierarchy.containsKey(leaf)) {
-              int count = hierarchy.get(leaf) + 1;
-              hierarchy.put(leaf, count);
-            } else {
-              hierarchy.put(leaf, 1);
-            }
+        SampleType parentType = s.getType();
+        List<Sample> children = s.getChildren();
+        if (children.isEmpty()) {
+          SampleTypeConnection leaf = new SampleTypeConnection(parentType);
+          if (hierarchy.containsKey(leaf)) {
+            int count = hierarchy.get(leaf) + 1;
+            hierarchy.put(leaf, count);
           } else {
-            for (Sample c : children) {
-              SampleType childType = c.getType();
-              SampleTypeConnection connection = new SampleTypeConnection(parentType, childType);
-              if (hierarchy.containsKey(connection)) {
-                int count = hierarchy.get(connection) + 1;
-                hierarchy.put(connection, count);
-              } else {
-                hierarchy.put(connection, 1);
-              }
+            hierarchy.put(leaf, 1);
+          }
+        } else {
+          for (Sample c : children) {
+            SampleType childType = c.getType();
+            SampleTypeConnection connection = new SampleTypeConnection(parentType, childType);
+            if (hierarchy.containsKey(connection)) {
+              int count = hierarchy.get(connection) + 1;
+              hierarchy.put(connection, count);
+            } else {
+              hierarchy.put(connection, 1);
             }
+          }
         }
       }
     }
@@ -197,7 +196,7 @@ public List<DataSet> listDatasetsOfExperiment(List<String> spaces, String experi
   }
 
   public List<DataSet> findDataSets(List<String> codes) {
-    if(codes.isEmpty()) {
+    if (codes.isEmpty()) {
       return new ArrayList<>();
     }
     DataSetSearchCriteria criteria = new DataSetSearchCriteria();
@@ -210,6 +209,7 @@ public List<DataSet> listDatasetsOfExperiment(List<String> spaces, String experi
     ExperimentSearchCriteria criteria = new ExperimentSearchCriteria();
     criteria.withIdentifier().thatEquals(experimentID);
 
-    return !openBIS.searchExperiments(criteria, new ExperimentFetchOptions()).getObjects().isEmpty();
+    return !openBIS.searchExperiments(criteria, new ExperimentFetchOptions()).getObjects()
+        .isEmpty();
   }
 }
