@@ -118,10 +118,8 @@ public class AuthenticationOptions {
   public static class ReadProperties {
 
     public static TreeMap<String, String> getProperties(String infile) {
-      final int lhs = 0;
-      final int rhs = 1;
 
-      TreeMap<String, String> map = new TreeMap<String, String>();
+      TreeMap<String, String> properties = new TreeMap<>();
       BufferedReader  bfr = null;
       try {
         bfr = new BufferedReader(new FileReader(new File(infile)));
@@ -132,14 +130,14 @@ public class AuthenticationOptions {
       String line;
       while (true) {
         try {
-          if (!((line = bfr.readLine()) != null))
+          if ((line = bfr.readLine()) == null)
             break;
         } catch (IOException e) {
           throw new RuntimeException(e);
         }
         if (!line.startsWith("#") && !line.isEmpty()) {
-          String[] pair = line.trim().split("=");
-          map.put(pair[lhs].trim(), pair[rhs].trim());
+          String[] property = line.trim().split("=");
+          properties.put(property[0].trim(), property[1].trim());
         }
       }
 
@@ -149,7 +147,7 @@ public class AuthenticationOptions {
         throw new RuntimeException(e);
       }
 
-      return(map);
+      return(properties);
     }
   }
 }

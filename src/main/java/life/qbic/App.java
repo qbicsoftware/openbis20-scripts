@@ -41,7 +41,7 @@ public class App {
    */
   public static OpenBIS loginToOpenBIS(
       char[] password, String user, String url) {
-    //setupLog();
+    setupLog();
 
     OpenBIS authentication = new OpenBIS(url);
 
@@ -55,7 +55,7 @@ public class App {
    */
   public static OpenBIS loginToOpenBIS(
       char[] password, String user, String url, String dssUrl) {
-    //setupLog();
+    setupLog();
 
     OpenBIS authentication = new OpenBIS(url, dssUrl);
 

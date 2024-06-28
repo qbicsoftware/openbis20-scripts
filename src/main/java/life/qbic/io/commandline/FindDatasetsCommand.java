@@ -45,12 +45,12 @@ public class FindDatasetsCommand implements Runnable {
           .sorted(Comparator.comparing(
               (DataSet d) -> d.getExperiment().getProject().getSpace().getCode())).collect(
               Collectors.toList());
-      int i = 0;
+      int datasetIndex = 0;
       System.out.println();
       System.out.printf("Found %s datasets for experiment %s:%n", datasets.size(), experimentCode);
       for (DataSet dataSet : datasets) {
-        i++;
-        System.out.println("["+i+"]");
+        datasetIndex++;
+        System.out.println("["+datasetIndex+"]");
         System.out.printf("ID: %s (%s)%n", dataSet.getCode(), dataSet.getExperiment().getIdentifier());
         System.out.println("Type: "+dataSet.getType().getCode());
         Person person = dataSet.getRegistrator();

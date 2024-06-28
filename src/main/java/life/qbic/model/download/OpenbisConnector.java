@@ -98,31 +98,6 @@ public class OpenbisConnector {
     return null;
   }
 
-  public static void main(String[] args) throws IOException {
-    String as = "";
-    String dss = "";
-    String user = "";
-    String pass = "";
-
-    OpenBIS authentication =
-        new OpenBIS(as, dss);
-      authentication.login(user, pass);
-    OpenbisConnector c = new OpenbisConnector(authentication);
-
-    String space = "TEMP_PLAYGROUND";
-    String project = "TEMP_PLAYGROUND";
-    String experiment = "E123";
-    String expID = "/TEMP_PLAYGROUND/TEMP_PLAYGROUND/E123";
-    Path toUpload = Path.of("/Users/afriedrich/Downloads/cats");
-    //c.registerDataset(toUpload, expID, List.of("20240512182451335-425180", "20240512191248297-425181"));
-
-    String basePath = "/Users/afriedrich/Downloads/downloaded_cats";
-    //c.downloadDataset(basePath, "20240503175717814-263844");
-    c.listDatasetsOfExperiment(List.of(), experiment);
-
-  }
-
-
 private static void copyInputStreamToFile(InputStream inputStream, File file)
     throws IOException {
   try (FileOutputStream outputStream = new FileOutputStream(file, false)) {
@@ -168,9 +143,9 @@ public List<DataSet> listDatasetsOfExperiment(List<String> spaces, String experi
       DataSetFile df = file.getDataSetFile();
       String currentPath = df.getPath().replace("original","");
       if(df.isDirectory()) {
-          File newDeer = new File(targetPath, currentPath);
-          if (!newDeer.exists()) {
-            newDeer.mkdirs();
+          File newDir = new File(targetPath, currentPath);
+          if (!newDir.exists()) {
+            newDir.mkdirs();
           }
       } else {
         File toWrite = new File(targetPath, currentPath);
@@ -222,6 +197,9 @@ public List<DataSet> listDatasetsOfExperiment(List<String> spaces, String experi
   }
 
   public List<DataSet> findDataSets(List<String> codes) {
+    if(codes.isEmpty()) {
+      return new ArrayList<>();
+    }
     DataSetSearchCriteria criteria = new DataSetSearchCriteria();
     criteria.withCodes().thatIn(codes);
     DataSetFetchOptions options = new DataSetFetchOptions();

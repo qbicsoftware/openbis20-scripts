@@ -58,11 +58,8 @@ public class UploadDatasetCommand implements Runnable {
       System.out.printf("Dataset %s was successfully created%n", result.getPermId());
     }
 
-  private boolean datasetsExist(List<String> parents) {
-      if(parents.isEmpty()) {
-        return true;
-      }
-      return openbis.findDataSets(parents).size() == parents.size();
+  private boolean datasetsExist(List<String> datasetCodes) {
+      return openbis.findDataSets(datasetCodes).size() == datasetCodes.size();
   }
 
   private boolean experimentExists(String experimentID) {
