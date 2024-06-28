@@ -8,9 +8,9 @@ import picocli.CommandLine.Option;
 
 // main command with format specifiers for the usage help message
 @Command(name = "openbis-scripts",
-        subcommands = { SampleHierarchyCommand.class },
+        subcommands = { SampleHierarchyCommand.class, FindDatasetsCommand.class, UploadDatasetCommand.class },
         description = "A client software for querying openBIS.",
-        mixinStandardHelpOptions = true)
+        mixinStandardHelpOptions = true, versionProvider = ManifestVersionProvider.class)
 public class CommandLineOptions {
   private static final Logger LOG = LogManager.getLogger(CommandLineOptions.class);
 
@@ -18,7 +18,7 @@ public class CommandLineOptions {
           versionHelp = true,
           description = "print version information",
           scope = CommandLine.ScopeType.INHERIT)
-  boolean versionRequested;
+  boolean versionRequested = false;
 
   @Option(
           names = {"-h", "--help"},
