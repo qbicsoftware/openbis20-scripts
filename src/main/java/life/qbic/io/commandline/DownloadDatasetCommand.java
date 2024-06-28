@@ -45,10 +45,10 @@ public class DownloadDatasetCommand implements Runnable {
           .sorted(Comparator.comparing(
               (DataSet d) -> d.getExperiment().getProject().getSpace().getCode())).collect(
               Collectors.toList());
-      int i = 0;
+      int datasetIndex = 0;
       for (DataSet dataSet : datasets) {
-        i++;
-        System.out.println("["+i+"]");
+        datasetIndex++;
+        System.out.println("["+datasetIndex+"]");
         System.out.println(dataSet.getExperiment().getIdentifier());
         System.out.println(dataSet.getCode());
         System.out.println(dataSet.getType().getCode());
