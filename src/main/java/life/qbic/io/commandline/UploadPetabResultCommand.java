@@ -4,22 +4,19 @@ import ch.ethz.sis.openbis.generic.OpenBIS;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.id.DataSetPermId;
 import java.io.File;
 import java.nio.file.Path;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import life.qbic.App;
+import life.qbic.io.PetabParser;
 import life.qbic.model.download.OpenbisConnector;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
-@Command(name = "upload-data",
-    description = "uploads a dataset and attaches it to an experiment and (optionally) other datasets")
-public class UploadDatasetCommand implements Runnable {
+@Command(name = "upload-petab-result",
+    description = "uploads a petab based on other PETab downloaded from openbis and attaches it to a provided experiment and any datasets referenced in the PETab metadata.")
+public class UploadPetabResultCommand implements Runnable {
 
   @Parameters(arity = "1", paramLabel = "file/folder", description = "The path to the file or folder to upload")
   private String dataPath;
@@ -33,6 +30,7 @@ public class UploadDatasetCommand implements Runnable {
   AuthenticationOptions auth = new AuthenticationOptions();
 
   private OpenbisConnector openbis;
+  private PetabParser petabParser = new PetabParser();
 
     @Override
     public void run() {
@@ -47,13 +45,14 @@ public class UploadDatasetCommand implements Runnable {
         System.out.printf("Experiment %s could not be found%n", experimentID);
         return;
       }
+      parents = petabParser.parse(dataPath).getSourcePetabReferences();
       if(!datasetsExist(parents)) {
         System.out.printf("One or more datasets %s could not be found%n", parents);
         return;
       }
       System.out.println();
       System.out.println("Parameters verified, uploading dataset...");
-      System.out.println();
+      System.out.println();//TODO copy and remove source references
       DataSetPermId result = openbis.registerDataset(Path.of(dataPath), experimentID, parents);
       System.out.printf("Dataset %s was successfully created%n", result.getPermId());
     }
