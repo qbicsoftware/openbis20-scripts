@@ -16,7 +16,7 @@ import life.qbic.App;
 import life.qbic.model.Configuration;
 import life.qbic.model.SampleTypeConnection;
 import life.qbic.model.download.FileSystemWriter;
-import life.qbic.model.download.ModelReporter;
+import life.qbic.model.download.SummaryWriter;
 import life.qbic.model.download.OpenbisConnector;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
@@ -38,10 +38,10 @@ public class SampleHierarchyCommand implements Runnable {
       List<String> summary = new ArrayList<>();
       List<String> spaces = new ArrayList<>();
         if(space!=null) {
-          summary.add("Querying samples in space: "+space+"...\n");
+          summary.add("Querying samples in space: "+space+"...");
           spaces.add(space);
         } else {
-          summary.add("Querying samples in all available spaces...\n");
+          summary.add("Querying samples in all available spaces...");
         }
         OpenBIS authentication = App.loginToOpenBIS(auth.getPassword(), auth.getUser(), auth.getAS());
         OpenbisConnector openbis = new OpenbisConnector(authentication);
@@ -55,13 +55,13 @@ public class SampleHierarchyCommand implements Runnable {
         System.out.println(s);
       }
       Path outputPath = Paths.get(Configuration.LOG_PATH.toString(),
-          "summary_model_"+getTimeStamp()+".txt");
+          "sample_model_summary"+getTimeStamp()+".txt");
       if(outpath!=null) {
         outputPath = Paths.get(outpath);
       }
-      ModelReporter modelReporter = new FileSystemWriter(outputPath);
+      SummaryWriter summaryWriter = new FileSystemWriter(outputPath);
       try {
-        modelReporter.reportSummary(summary);
+        summaryWriter.reportSummary(summary);
       } catch (IOException e) {
         throw new RuntimeException("Could not write summary file.");
       }

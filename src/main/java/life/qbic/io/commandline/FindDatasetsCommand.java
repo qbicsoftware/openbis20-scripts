@@ -4,15 +4,15 @@ import ch.ethz.sis.openbis.generic.OpenBIS;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.DataSet;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.person.Person;
 import java.text.SimpleDateFormat;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import life.qbic.App;
+import life.qbic.model.DatasetWithProperties;
 import life.qbic.model.download.OpenbisConnector;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
@@ -45,12 +45,28 @@ public class FindDatasetsCommand implements Runnable {
           .sorted(Comparator.comparing(
               (DataSet d) -> d.getExperiment().getProject().getSpace().getCode())).collect(
               Collectors.toList());
+      Map<String, String> properties = new HashMap<>();
+      if (!datasets.isEmpty()) {
+        Optional<String> patientID = openbis.findPropertyInSampleHierarchy("PATIENT_DKFZ_ID",
+            datasets.get(0).getExperiment().getIdentifier());
+        patientID.ifPresent(s -> properties.put("Patient ID", s));
+      }
+      List<DatasetWithProperties> datasetWithProperties = datasets.stream().map(dataSet -> {
+        DatasetWithProperties ds = new DatasetWithProperties(dataSet);
+        for (String key : properties.keySet()) {
+          ds.addProperty(key, properties.get(key));
+        }
+        return ds;
+      }).collect(Collectors.toList());
       int datasetIndex = 0;
       System.out.println();
       System.out.printf("Found %s datasets for experiment %s:%n", datasets.size(), experimentCode);
-      for (DataSet dataSet : datasets) {
+      for (DatasetWithProperties dataSet : datasetWithProperties) {
         datasetIndex++;
         System.out.println("["+datasetIndex+"]");
+        for(String key : dataSet.getProperties().keySet()) {
+          System.out.println(key+ ": "+properties.get(key));
+        }
         System.out.printf("ID: %s (%s)%n", dataSet.getCode(), dataSet.getExperiment().getIdentifier());
         System.out.println("Type: "+dataSet.getType().getCode());
         Person person = dataSet.getRegistrator();
@@ -62,9 +78,4 @@ public class FindDatasetsCommand implements Runnable {
       }
     }
 
-    private String getTimeStamp() {
-      final String PATTERN_FORMAT = "YYYY-MM-dd_HHmmss";
-      DateTimeFormatter formatter = DateTimeFormatter.ofPattern(PATTERN_FORMAT);
-      return LocalDateTime.ofInstant(Instant.now(), ZoneOffset.UTC).format(formatter);
-    }
 }
