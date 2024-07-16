@@ -14,7 +14,7 @@ import java.util.List;
  *
  * @author: Sven Fillinger, Andreas Friedrich
  */
-public class FileSystemWriter implements ModelReporter {
+public class FileSystemWriter implements SummaryWriter {
 
   /**
    * File that stores the summary report content for valid checksums.

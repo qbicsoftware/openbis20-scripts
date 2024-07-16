@@ -8,6 +8,7 @@ import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.id.DataSetPermId;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.search.DataSetSearchCriteria;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.entitytype.EntityKind;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.entitytype.id.EntityTypePermId;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.fetchoptions.ExperimentFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.id.ExperimentIdentifier;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.search.ExperimentSearchCriteria;
@@ -35,6 +36,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import life.qbic.model.SampleTypeConnection;
 import org.apache.logging.log4j.LogManager;
@@ -44,29 +46,6 @@ public class OpenbisConnector {
 
   private static final Logger LOG = LogManager.getLogger(OpenbisConnector.class);
   OpenBIS openBIS;
-
-  /**
-   * Constructor for a QBiCDataDownloader instance
-   *
-   * @param AppServerUri The openBIS application server URL (AS)
-   * @param sessionToken The session token for the datastore & application servers
-   */
-  public OpenbisConnector(
-      String AppServerUri,
-      String sessionToken) {
-    /*
-    this.sessionToken = sessionToken;
-
-    if (!AppServerUri.isEmpty()) {
-      applicationServer =
-          HttpInvokerUtils.createServiceStub(
-              IApplicationServerApi.class, AppServerUri + IApplicationServerApi.SERVICE_URL, 10000);
-    } else {
-      applicationServer = null;
-    }
-
-     */
-  }
 
   public OpenbisConnector(OpenBIS authentication) {
     this.openBIS = authentication;
@@ -124,12 +103,11 @@ public class OpenbisConnector {
     return openBIS.searchDataSets(criteria, options).getObjects();
   }
 
-  public void downloadDataset(String targetPath, String datasetID) throws IOException {
+  public void downloadDataset(String targetPath, String datasetID) {
     DataSetFileDownloadOptions options = new DataSetFileDownloadOptions();
     IDataSetFileId fileToDownload = new DataSetFilePermId(new DataSetPermId(datasetID),
         "");
 
-    System.err.println(fileToDownload);
     // Setting recursive flag to true will return both subfolders and files
     options.setRecursive(true);
 
@@ -137,18 +115,24 @@ public class OpenbisConnector {
     InputStream stream = openBIS.downloadFiles(new ArrayList<>(List.of(fileToDownload)),
         options);
     DataSetFileDownloadReader reader = new DataSetFileDownloadReader(stream);
-    DataSetFileDownload file = null;
+    DataSetFileDownload file;
     while ((file = reader.read()) != null) {
       DataSetFile df = file.getDataSetFile();
       String currentPath = df.getPath().replace("original", "");
       if (df.isDirectory()) {
         File newDir = new File(targetPath, currentPath);
         if (!newDir.exists()) {
-          newDir.mkdirs();
+          if(!newDir.mkdirs()) {
+            throw new RuntimeException("Could not create folders for downloaded dataset.");
+          }
         }
       } else {
         File toWrite = new File(targetPath, currentPath);
-        copyInputStreamToFile(file.getInputStream(), toWrite);
+        try {
+          copyInputStreamToFile(file.getInputStream(), toWrite);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
       }
     }
   }
@@ -195,6 +179,165 @@ public class OpenbisConnector {
     return hierarchy;
   }
 
+  private Optional<String> getPropertyFromSampleHierarchy(String propertyName, List<Sample> samples) {
+    for(Sample s : samples) {
+      if(s.getProperties().containsKey(propertyName)) {
+        return Optional.of(s.getProperties().get(propertyName));
+      }
+      return getPropertyFromSampleHierarchy(propertyName, s.getParents());
+    }
+    return Optional.empty();
+  }
+
+  public Optional<String> findPropertyInSampleHierarchy(String propertyName,
+      ExperimentIdentifier experimentId) {
+    return getPropertyFromSampleHierarchy(propertyName,
+        getSamplesWithAncestorsOfExperiment(experimentId));
+  }
+
+  public Map<String, List<Experiment>> getExperimentsBySpace(List<String> spaces) {
+    Map<String, List<Experiment>> result = new HashMap<>();
+    ExperimentFetchOptions options = new ExperimentFetchOptions();
+    options.withProject().withSpace();
+    ExperimentSearchCriteria criteria = new ExperimentSearchCriteria();
+    criteria.withProject().withSpace().withCodes().thatIn(spaces);
+    for (Experiment e : openBIS.searchExperiments(criteria, options).getObjects()) {
+      String space = e.getProject().getSpace().getCode();
+      if(result.containsKey(space)) {
+        result.get(space).add(e);
+      } else {
+        result.put(space, new ArrayList<>());
+      }
+    }
+    return result;
+  }
+
+  public Map<String, List<Sample>> getSamplesBySpace(List<String> spaces) {
+    Map<String, List<Sample>> result = new HashMap<>();
+    SampleFetchOptions options = new SampleFetchOptions();
+    options.withSpace();
+    SampleSearchCriteria criteria = new SampleSearchCriteria();
+    criteria.withSpace().withCodes().thatIn(spaces);
+    for (Sample s : openBIS.searchSamples(criteria, options).getObjects()) {
+      String space = s.getSpace().getCode();
+      if(!result.containsKey(space)) {
+        result.put(space, new ArrayList<>());
+      }
+      result.get(space).add(s);
+    }
+    return result;
+  }
+
+  public Map<String, Map<String, List<Experiment>>> getExperimentsByTypeAndSpace(List<String> spaces) {
+    Map<String, Map<String, List<Experiment>>> result = new HashMap<>();
+    ExperimentFetchOptions options = new ExperimentFetchOptions();
+    options.withProject().withSpace();
+    options.withType();
+
+    ExperimentSearchCriteria criteria = new ExperimentSearchCriteria();
+    criteria.withProject().withSpace().withCodes().thatIn(spaces);
+    for (Experiment exp : openBIS.searchExperiments(criteria, options).getObjects()) {
+      String space = exp.getProject().getSpace().getCode();
+      String type = exp.getType().getCode();
+      if(!result.containsKey(space)) {
+        Map<String, List<Experiment>> typeMap = new HashMap<>();
+        typeMap.put(type, new ArrayList<>(Arrays.asList(exp)));
+        result.put(space, typeMap);
+      } else {
+        Map<String, List<Experiment>> typeMap = result.get(space);
+        if(!typeMap.containsKey(type)) {
+          typeMap.put(type, new ArrayList<>());
+        }
+        typeMap.get(type).add(exp);
+      }
+    }
+    return result;
+  }
+
+  public Map<String, Map<String, List<Sample>>> getSamplesByTypeAndSpace(List<String> spaces) {
+    Map<String, Map<String, List<Sample>>> result = new HashMap<>();
+    SampleFetchOptions options = new SampleFetchOptions();
+    options.withSpace();
+    options.withType();
+
+    SampleSearchCriteria criteria = new SampleSearchCriteria();
+    criteria.withSpace().withCodes().thatIn(spaces);
+    for (Sample s : openBIS.searchSamples(criteria, options).getObjects()) {
+      String space = s.getSpace().getCode();
+      String type = s.getType().getCode();
+      if(!result.containsKey(space)) {
+        Map<String, List<Sample>> typeMap = new HashMap<>();
+        typeMap.put(type, new ArrayList<>(Arrays.asList(s)));
+        result.put(space, typeMap);
+      } else {
+        Map<String, List<Sample>> typeMap = result.get(space);
+        if(!typeMap.containsKey(type)) {
+          typeMap.put(type, new ArrayList<>());
+        }
+        typeMap.get(type).add(s);
+      }
+    }
+    return result;
+  }
+
+  public Map<String, Map<String, List<DataSet>>> getDatasetsByTypeAndSpace(List<String> spaces) {
+    Map<String, Map<String, List<DataSet>>> result = new HashMap<>();
+    DataSetFetchOptions options = new DataSetFetchOptions();
+    options.withSample().withSpace();
+    options.withExperiment().withProject().withSpace();
+    options.withType();
+    DataSetSearchCriteria criteria = new DataSetSearchCriteria();
+    criteria.withOrOperator();
+    criteria.withSample().withSpace().withCodes().thatIn(spaces);
+    criteria.withExperiment().withProject().withSpace().withCodes().thatIn(spaces);
+    for (DataSet d : openBIS.searchDataSets(criteria, options).getObjects()) {
+      String space = getSpaceFromSampleOrExperiment(d);
+      String type = d.getType().getCode();
+      if(!result.containsKey(space)) {
+        Map<String, List<DataSet>> typeMap = new HashMap<>();
+        typeMap.put(type, new ArrayList<>(Arrays.asList(d)));
+        result.put(space, typeMap);
+      } else {
+        Map<String, List<DataSet>> typeMap = result.get(space);
+        if(!typeMap.containsKey(type)) {
+          typeMap.put(type, new ArrayList<>());
+        }
+        typeMap.get(type).add(d);
+      }
+    }
+    return result;
+  }
+
+  private String getSpaceFromSampleOrExperiment(DataSet d) {
+    try {
+      if (d.getSample() != null) {
+        return d.getSample().getSpace().getCode();
+      }
+      if (d.getExperiment() != null) {
+        return d.getExperiment().getProject().getSpace().getCode();
+      }
+    } catch (NullPointerException e) {
+
+    }
+    System.out.println("Dataset " + d + "does not seem to be attached to a space");
+    return "NO SPACE";
+  }
+
+  private List<Sample> getSamplesWithAncestorsOfExperiment(ExperimentIdentifier experimentId) {
+    SampleFetchOptions allProps = new SampleFetchOptions();
+    allProps.withType();
+    allProps.withProperties();
+    SampleFetchOptions withAncestors = new SampleFetchOptions();
+    withAncestors.withParentsUsing(allProps);
+    withAncestors.withProperties();
+    withAncestors.withType();
+
+    SampleSearchCriteria criteria = new SampleSearchCriteria();
+    criteria.withExperiment().withId().thatEquals(experimentId);
+
+    return openBIS.searchSamples(criteria, withAncestors).getObjects();
+  }
+
   public List<DataSet> findDataSets(List<String> codes) {
     if (codes.isEmpty()) {
       return new ArrayList<>();
@@ -202,6 +345,7 @@ public class OpenbisConnector {
     DataSetSearchCriteria criteria = new DataSetSearchCriteria();
     criteria.withCodes().thatIn(codes);
     DataSetFetchOptions options = new DataSetFetchOptions();
+    options.withExperiment();
     return openBIS.searchDataSets(criteria, options).getObjects();
   }
 
@@ -212,4 +356,5 @@ public class OpenbisConnector {
     return !openBIS.searchExperiments(criteria, new ExperimentFetchOptions()).getObjects()
         .isEmpty();
   }
+
 }
