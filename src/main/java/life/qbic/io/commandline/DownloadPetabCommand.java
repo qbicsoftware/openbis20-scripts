@@ -2,6 +2,7 @@ package life.qbic.io.commandline;
 
 import ch.ethz.sis.openbis.generic.OpenBIS;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.DataSet;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -39,18 +40,21 @@ public class DownloadPetabCommand implements Runnable {
       Optional<String> patientID = openbis.findPropertyInSampleHierarchy("PATIENT_DKFZ_ID",
           result.getExperiment().getIdentifier());
       patientID.ifPresent(s -> result.addProperty("patientID", s));
-      result.addProperty("openbisID", datasetCode);
 
       System.out.println("Found dataset, downloading.");
       System.out.println();
 
       openbis.downloadDataset(outputPath, datasetCode);
 
-      System.out.println("Adding additional information to petab.yaml");
-      System.out.println();
-
       PetabParser parser = new PetabParser();
-      parser.addParameters(outputPath, result.getProperties());
+      try {
+        System.out.println("Adding dataset identifier to metaInformation.yaml.");
+        parser.addDatasetId(outputPath, datasetCode);
+      } catch (IOException e) {
+        System.out.println("Could not add dataset identifier.");
+        throw new RuntimeException(e);
+      }
+      //parser.addParameters(outputPath, result.getProperties()); //TODO: might be used in the future
       System.out.println("Done");
     }
 

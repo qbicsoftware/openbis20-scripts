@@ -9,6 +9,13 @@ public class ConditionWithUnit {
   @JsonProperty
   String unit;
 
+  public ConditionWithUnit() {}
+
+  public ConditionWithUnit(String name, String unit) {
+    this.name = name;
+    this.unit = unit;
+  }
+
   @Override
   public String toString() {
     return "ConditionWithUnit{" +

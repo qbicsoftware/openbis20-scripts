@@ -1,20 +1,19 @@
 package life.qbic.io;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import life.qbic.model.petab.MetaInformation;
 import life.qbic.model.petab.PetabMetadata;
 
 public class PetabParser {
@@ -31,14 +30,24 @@ public class PetabParser {
       BufferedReader reader = null;
       try {
         reader = new BufferedReader(new FileReader(yaml));
+        boolean inIDBlock = false;
         while (true) {
           String line = reader.readLine();
           if (line == null) {
             break;
           }
-          if (line.startsWith("openbisID")) {
-            String datasetCode = line.strip().split(": ")[1];
-            sourcePetabReferences.add(datasetCode);
+          if(inIDBlock && line.contains(":")) {
+            inIDBlock = false;
+          }
+          if(inIDBlock) {
+            String[] tokens = line.split("-");
+            if(tokens.length == 3) {
+              String datasetCode = tokens[1].strip()+"-"+tokens[2].strip();
+              sourcePetabReferences.add(datasetCode);
+            }
+          }
+          if (line.contains("openBISSourceIds:")) {
+            inIDBlock = true;
           }
         }
         reader.close();
@@ -48,6 +57,18 @@ public class PetabParser {
     }
 
     return new PetabMetadata(sourcePetabReferences);
+  }
+
+  public void addDatasetId(String outputPath, String datasetCode) throws IOException {
+
+    Path path = Paths.get(Objects.requireNonNull(findYaml(new File(outputPath))).getPath());
+    Charset charset = StandardCharsets.UTF_8;
+
+    String idInLine = "openBISId:(.*)?(\\r\\n|[\\r\\n])";
+
+    String content = Files.readString(path, charset);
+    content = content.replaceAll(idInLine, "openBISId: "+datasetCode+"\n");
+    Files.write(path, content.getBytes(charset));
   }
 
   private File findYaml(File directory) {
@@ -90,8 +111,13 @@ public class PetabParser {
   }
 
   public static void main(String[] args) throws IOException {
+
+    /*
+
+
     File testfile = new File("/Users/afriedrich/git/openbis-20-scripts/example_petab/metaInformation.yaml");
     ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+
     mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     MetaInformation metaInfo = mapper.readValue(testfile, MetaInformation.class);
     System.err.println(metaInfo);
@@ -104,72 +130,26 @@ public class PetabParser {
     MetaInformation metaInfo2 = mapper2.readValue(testfile, MetaInformation.class);
     System.err.println(metaInfo2);
 
-    /*
-MetaInformation{
-  units=Units{
-    measurement='some technique',
-    time='min,
-    t0 = timepoint of first intervention',
-    stimulus='something',
-    medium=Medium{type='DMEM', volume=1.5, unit='ml'},
-    ncells=CellCountInfo{seeded=0.0, count='null', unit='null'},
-    measurement_technique='immunublotting',
-    openBISId='null', openBISParentIds=null,
-    dateOfExperiment=[2024-04-30]
-  },
-  preprocessingInformation=null,
-  measurementData=MeasurementData{
-    measurement=Measurement{
-      unit='intensity (a.u.)', lloq='null'},
-      time=Time{unit='min'},
-      replicateId=IdWithPattern{name='null', pattern='date_gel_replicate'}
-    },
-    experimentalCondition=ExperimentalCondition{conditionId=IdWithPattern{name='null', pattern='condition'},
-    conditions=null}}
-
-
-    ExperimentInformation:
-units:
-  measurement: some technique
-  time: min, t0 = timepoint of first intervention
-  treatment:
-  stimulus: something
-  medium:
-    type: DMEM
-    volume: 1.5
-    unit: ml
-  ncells:
-    seeded: 0.4
-    ncellsCount: ~
-    unit: mio
-  measurement_technique: immunublotting
-  openBISId: ~
-  dateOfExperiment:
-    - 2024-04-30
-PreprocessingInformation:
-  normalizationStatus: Raw (data on linear scale)
-  preprocessing:
-    method: normalize by blotIt
-    arguments:
-      housekeeperObservableIds:
-    description:
-measurementData:
-  measurement:
-    unit: intensity (a.u.)
-    lloq: ~
-  time:
-    unit: min
-  replicateId:
-    pattern: date_gel_replicate
-experimentalCondition:
+    experimentalCondition:
   conditionId:
-    pattern: condition
-  TGFb:
+    pattern: treatment1_treatment2
+  - treatment1: TGFb
     unit: ng/ul
-  GAS6:
+  - treatment2: GAS6
     unit: ug/ml
 
-     */
+    File test = new File("/Users/afriedrich/git/openbis-20-scripts/Output.yaml");
+    ExperimentalCondition metaInfo = mapper.readValue(test, ExperimentalCondition.class);
+    System.err.println(metaInfo);
+
+
+    List<ConditionWithUnit> list = new ArrayList<>();
+    list.add(new ConditionWithUnit("TGFb", "ng/ul"));
+    list.add(new ConditionWithUnit("GAS6", "ug/ml"));
+    ExperimentalCondition conditions = new ExperimentalCondition(
+        new IdWithPattern("treatment1_treatment2"), list);
+    //mapper.writeValue(new File("/Users/afriedrich/git/openbis-20-scripts/Output.yaml"),conditions);
+*/
   }
 
 }

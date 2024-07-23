@@ -10,6 +10,21 @@ public class ExperimentalCondition {
   @JsonProperty
   List<ConditionWithUnit> conditions;
 
+  public ExperimentalCondition() {}
+
+  public ExperimentalCondition(IdWithPattern pattern, List<ConditionWithUnit> conditions) {
+    this.conditionId = pattern;
+    this.conditions = conditions;
+  }
+
+  public void setConditions(List<ConditionWithUnit> conditions) {
+    this.conditions = conditions;
+  }
+
+  public void setConditionId(IdWithPattern id) {
+    this.conditionId = id;
+  }
+
   @Override
   public String toString() {
     return "ExperimentalCondition{" +
