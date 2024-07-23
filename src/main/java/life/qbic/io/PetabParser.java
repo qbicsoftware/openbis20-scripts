@@ -110,46 +110,5 @@ public class PetabParser {
     }
   }
 
-  public static void main(String[] args) throws IOException {
-
-    /*
-
-
-    File testfile = new File("/Users/afriedrich/git/openbis-20-scripts/example_petab/metaInformation.yaml");
-    ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
-
-    mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    MetaInformation metaInfo = mapper.readValue(testfile, MetaInformation.class);
-    System.err.println(metaInfo);
-    metaInfo.getUnits().setOpenbisParentIds(Arrays.asList("1","2"));
-    metaInfo.getUnits().setOpenbisId("3");
-    mapper.writeValue(new File("/Users/afriedrich/git/openbis-20-scripts/Output.yaml"), metaInfo);
-
-
-    ObjectMapper mapper2 = new YAMLMapper();
-    MetaInformation metaInfo2 = mapper2.readValue(testfile, MetaInformation.class);
-    System.err.println(metaInfo2);
-
-    experimentalCondition:
-  conditionId:
-    pattern: treatment1_treatment2
-  - treatment1: TGFb
-    unit: ng/ul
-  - treatment2: GAS6
-    unit: ug/ml
-
-    File test = new File("/Users/afriedrich/git/openbis-20-scripts/Output.yaml");
-    ExperimentalCondition metaInfo = mapper.readValue(test, ExperimentalCondition.class);
-    System.err.println(metaInfo);
-
-
-    List<ConditionWithUnit> list = new ArrayList<>();
-    list.add(new ConditionWithUnit("TGFb", "ng/ul"));
-    list.add(new ConditionWithUnit("GAS6", "ug/ml"));
-    ExperimentalCondition conditions = new ExperimentalCondition(
-        new IdWithPattern("treatment1_treatment2"), list);
-    //mapper.writeValue(new File("/Users/afriedrich/git/openbis-20-scripts/Output.yaml"),conditions);
-*/
-  }
 
 }
