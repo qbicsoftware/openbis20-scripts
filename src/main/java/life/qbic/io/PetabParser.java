@@ -12,6 +12,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import life.qbic.model.petab.PetabMetadata;
 
 public class PetabParser {
@@ -35,13 +36,12 @@ public class PetabParser {
             break;
           }
           // the id block ends, when a new key with colon is found
-          if(inIDBlock && line.contains(":")) {
+          if (inIDBlock && line.contains(":")) {
             inIDBlock = false;
           }
           // if we are in the id block, we collect one dataset code per line
-          if(inIDBlock) {
-            String datasetCode = parseDatasetCode(line);
-            sourcePetabReferences.add(datasetCode);
+          if (inIDBlock) {
+            parseDatasetCode(line).ifPresent(code -> sourcePetabReferences.add(code));
           }
           if (line.contains("openBISSourceIds:")) {
             inIDBlock = true;
@@ -56,16 +56,16 @@ public class PetabParser {
     return new PetabMetadata(sourcePetabReferences);
   }
 
-  private String parseDatasetCode(String line) {
+  private Optional<String> parseDatasetCode(String line) {
     // expected input: "    - 20240702093837370-684137"
     String[] tokens = line.split("-");
     if(tokens.length == 3) {
-      String datasetCode = tokens[1].strip()+"-"+tokens[2].strip();
-      return datasetCode;
+      return Optional.of(tokens[1].strip()+"-"+tokens[2].strip());
     } else {
       System.out.println("Could not extract dataset code from the following line:");
       System.out.println(line);
     }
+    return Optional.empty();
   }
 
   public void addDatasetId(String outputPath, String datasetCode) throws IOException {
