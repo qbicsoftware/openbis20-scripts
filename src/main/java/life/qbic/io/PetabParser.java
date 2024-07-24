@@ -34,15 +34,14 @@ public class PetabParser {
           if (line == null) {
             break;
           }
+          // the id block ends, when a new key with colon is found
           if(inIDBlock && line.contains(":")) {
             inIDBlock = false;
           }
+          // if we are in the id block, we collect one dataset code per line
           if(inIDBlock) {
-            String[] tokens = line.split("-");
-            if(tokens.length == 3) {
-              String datasetCode = tokens[1].strip()+"-"+tokens[2].strip();
-              sourcePetabReferences.add(datasetCode);
-            }
+            String datasetCode = parseDatasetCode(line);
+            sourcePetabReferences.add(datasetCode);
           }
           if (line.contains("openBISSourceIds:")) {
             inIDBlock = true;
@@ -57,21 +56,35 @@ public class PetabParser {
     return new PetabMetadata(sourcePetabReferences);
   }
 
+  private String parseDatasetCode(String line) {
+    // expected input: "    - 20240702093837370-684137"
+    String[] tokens = line.split("-");
+    if(tokens.length == 3) {
+      String datasetCode = tokens[1].strip()+"-"+tokens[2].strip();
+      return datasetCode;
+    } else {
+      System.out.println("Could not extract dataset code from the following line:");
+      System.out.println(line);
+    }
+  }
+
   public void addDatasetId(String outputPath, String datasetCode) throws IOException {
 
     Path path = Paths.get(Objects.requireNonNull(findYaml(new File(outputPath))).getPath());
     Charset charset = StandardCharsets.UTF_8;
 
-    String idInLine = "openBISId:(.*)?(\\r\\n|[\\r\\n])";
+    final String keyWord = "openBISId";
+
+    String idInLine = keyWord+":(.*)?(\\r\\n|[\\r\\n])";
 
     String content = Files.readString(path, charset);
-    content = content.replaceAll(idInLine, "openBISId: "+datasetCode+"\n");
+    content = content.replaceAll(idInLine, keyWord+": "+datasetCode+"\n");
     Files.write(path, content.getBytes(charset));
   }
 
   private File findYaml(File directory) {
     for (File file : Objects.requireNonNull(directory.listFiles())) {
-      if (file.isFile() && file.getName().equals(META_INFO_YAML)) {
+      if (file.isFile() && file.getName().equalsIgnoreCase(META_INFO_YAML)) {
         return file;
       }
       if (file.isDirectory()) {
