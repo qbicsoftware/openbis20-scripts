@@ -52,7 +52,6 @@ public class PetabParser {
         throw new RuntimeException(e);
       }
     }
-
     return new PetabMetadata(sourcePetabReferences);
   }
 

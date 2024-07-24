@@ -47,7 +47,8 @@ public class UploadPetabResultCommand implements Runnable {
       System.out.println("Looking for reference datasets in metaInformation.yaml...");
       parents = petabParser.parse(dataPath).getSourcePetabReferences();
       if(parents.isEmpty()) {
-        System.out.println("No reference datasets found. Did you set the openBISSourceIds property?");
+        System.out.println("No reference datasets found in openBISSourceIds property. Assuming"
+            + "this is a new dataset.");
       } else {
         System.out.println("Found reference ids: " + String.join(", ", parents));
         if (!datasetsExist(parents)) {
