@@ -2,7 +2,6 @@ package life.qbic.io;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -12,7 +11,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import life.qbic.model.petab.PetabMetadata;
 
@@ -83,32 +81,5 @@ public class PetabParser {
     System.out.println(META_INFO_YAML + " not found");
     return null;
   }
-
-  /**
-   * adds key-value pairs to the bottom of a petab.yaml found below the provided path
-   *
-   * @param outputPath the path of the PEtab
-   * @param properties map of properties to add
-   */
-  public void addParameters(String outputPath, Map<String, String> properties) {
-
-    File directory = new File(outputPath);
-
-    File yaml = findYaml(directory);
-    if (yaml != null) {
-      FileOutputStream fos = null;
-      try {
-        fos = new FileOutputStream(yaml.getPath(), true);
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-          String line = entry.getKey() + ": " + entry.getValue() + "\n";
-          fos.write(line.getBytes());
-        }
-        fos.close();
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
-  }
-
 
 }

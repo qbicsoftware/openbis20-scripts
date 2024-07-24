@@ -54,7 +54,6 @@ public class DownloadPetabCommand implements Runnable {
         System.out.println("Could not add dataset identifier.");
         throw new RuntimeException(e);
       }
-      //parser.addParameters(outputPath, result.getProperties()); //TODO: might be used in the future
       System.out.println("Done");
     }
 

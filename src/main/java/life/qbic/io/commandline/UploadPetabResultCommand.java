@@ -58,7 +58,8 @@ public class UploadPetabResultCommand implements Runnable {
       }
       System.out.println();
       System.out.println("Reference datasets found, uploading dataset...");
-      System.out.println();//TODO copy and remove source references
+      System.out.println();
+      //TODO copy and remove source references here
       DataSetPermId result = openbis.registerDataset(Path.of(dataPath), experimentID, parents);
       System.out.printf("Dataset %s was successfully created%n", result.getPermId());
     }
