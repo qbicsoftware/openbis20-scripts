@@ -23,8 +23,8 @@ public class UploadPetabResultCommand implements Runnable {
   @Parameters(arity = "1", paramLabel = "experiment ID", description = "The full identifier of the experiment the data should be attached to. "
       + "The identifier must be of the format: /space/project/experiment")
   private String experimentID;
-  @Option(arity = "1..*", paramLabel = "<parent_datasets>", description = "Optional list of dataset codes to act"
-      + " as parents for the upload. E.g. when this dataset has been generated using these datasets as input.", names = {"-pa", "--parents"})
+  //@Option(arity = "1..*", paramLabel = "<parent_datasets>", description = "Optional list of dataset codes to act"
+  //    + " as parents for the upload. E.g. when this dataset has been generated using these datasets as input.", names = {"-pa", "--parents"})
   private List<String> parents = new ArrayList<>();
   @Mixin
   AuthenticationOptions auth = new AuthenticationOptions();
