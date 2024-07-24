@@ -41,7 +41,7 @@ public class PetabParser {
           }
           // if we are in the id block, we collect one dataset code per line
           if (inIDBlock) {
-            parseDatasetCode(line).ifPresent(code -> sourcePetabReferences.add(code));
+            parseDatasetCode(line).ifPresent(sourcePetabReferences::add);
           }
           if (line.contains("openBISSourceIds:")) {
             inIDBlock = true;
