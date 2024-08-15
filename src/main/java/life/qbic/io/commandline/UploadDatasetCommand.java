@@ -4,10 +4,6 @@ import ch.ethz.sis.openbis.generic.OpenBIS;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.id.DataSetPermId;
 import java.io.File;
 import java.nio.file.Path;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import life.qbic.App;
@@ -23,9 +19,9 @@ public class UploadDatasetCommand implements Runnable {
 
   @Parameters(arity = "1", paramLabel = "file/folder", description = "The path to the file or folder to upload")
   private String dataPath;
-  @Parameters(arity = "1", paramLabel = "experiment ID", description = "The full identifier of the experiment the data should be attached to. "
-      + "The identifier must be of the format: /space/project/experiment")
-  private String experimentID;
+  @Parameters(arity = "1", paramLabel = "object ID", description = "The full identifier of the experiment or sample the data should be attached to. "
+      + "The identifier must be of the format: /space/project/experiment for experiments or /space/sample for samples")
+  private String objectID;
   @Option(arity = "1..*", paramLabel = "<parent_datasets>", description = "Optional list of dataset codes to act"
       + " as parents for the upload. E.g. when this dataset has been generated using these datasets as input.", names = {"-pa", "--parents"})
   private List<String> parents = new ArrayList<>();
@@ -36,15 +32,28 @@ public class UploadDatasetCommand implements Runnable {
 
     @Override
     public void run() {
-      OpenBIS authentication = App.loginToOpenBIS(auth.getPassword(), auth.getUser(), auth.getAS(), auth.getDSS());
+      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getAS(), auth.getDSS());
       openbis = new OpenbisConnector(authentication);
 
       if(!pathValid(dataPath)) {
         System.out.printf("Path %s could not be found%n", dataPath);
         return;
       }
-      if(!experimentExists(experimentID)) {
-        System.out.printf("Experiment %s could not be found%n", experimentID);
+      boolean attachToSample = OpenbisConnector.sampleIdPattern.matcher(objectID).find();
+      boolean attachToExperiment = false;
+      if(!attachToSample) {
+        attachToExperiment = OpenbisConnector.experimentIdPattern.matcher(objectID).find();
+      }
+      if(!attachToExperiment && !attachToSample) {
+        System.out.printf("%s is neither a valid experiment nor sample identifier%n", objectID);
+        return;
+      }
+      if(attachToExperiment && !experimentExists(objectID)) {
+        System.out.printf("Experiment with identifier %s could not be found%n", objectID);
+        return;
+      }
+      if(attachToSample && !sampleExists(objectID)) {
+        System.out.printf("Sample object with identifier %s could not be found%n", objectID);
         return;
       }
       if(!datasetsExist(parents)) {
@@ -54,9 +63,18 @@ public class UploadDatasetCommand implements Runnable {
       System.out.println();
       System.out.println("Parameters verified, uploading dataset...");
       System.out.println();
-      DataSetPermId result = openbis.registerDataset(Path.of(dataPath), experimentID, parents);
-      System.out.printf("Dataset %s was successfully created%n", result.getPermId());
+      if(attachToExperiment) {
+        DataSetPermId result = openbis.registerDatasetForExperiment(Path.of(dataPath), objectID, parents);
+        System.out.printf("Dataset %s was successfully created%n", result.getPermId());
+      } else {
+        DataSetPermId result = openbis.registerDatasetForSample(Path.of(dataPath), objectID, parents);
+        System.out.printf("Dataset %s was successfully created%n", result.getPermId());
+      }
     }
+
+  private boolean sampleExists(String objectID) {
+      return openbis.sampleExists(objectID);
+  }
 
   private boolean datasetsExist(List<String> datasetCodes) {
       return openbis.findDataSets(datasetCodes).size() == datasetCodes.size();
@@ -70,4 +88,5 @@ public class UploadDatasetCommand implements Runnable {
       return new File(dataPath).exists();
   }
 
+  
 }

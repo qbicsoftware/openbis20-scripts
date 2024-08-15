@@ -2,26 +2,28 @@ package life.qbic.io.commandline;
 
 import ch.ethz.sis.openbis.generic.OpenBIS;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.DataSet;
-import java.io.IOException;
+import java.io.File;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import life.qbic.App;
-import life.qbic.io.PetabParser;
 import life.qbic.model.DatasetWithProperties;
 import life.qbic.model.download.OpenbisConnector;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
+import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
-@Command(name = "download-petab",
-    description = "Downloads PEtab dataset and stores some additional information from openbis in the petab.yaml")
-public class DownloadPetabCommand implements Runnable {
+@Command(name = "openbis-to-seek",
+    description = "Transfers data or metadata from openBIS to SEEK.")
+public class TransferDataToSeekCommand implements Runnable {
 
-  @Parameters(arity = "1", paramLabel = "dataset id", description = "The code of the dataset to download. Can be found via list-data.")
+  @Parameters(arity = "1", paramLabel = "dataset id", description = "The code of the dataset (or its metadata) to transfer. Can be found via list-data.")
   private String datasetCode;
-  @Parameters(arity = "1", paramLabel = "download path", description = "The local path where to store the downloaded data")
-  private String outputPath;
+  @Parameters(arity = "1", paramLabel = "seek node", description = "The node in SEEK to which to transfer the dataset.")
+  private String seekNode;
+  @Option(names = { "-d", "--data"}, usageHelp = true, description = "Transfers the data itself to SEEK along with the metadata")
+  private boolean transferData;
   @Mixin
   AuthenticationOptions auth = new AuthenticationOptions();
 
@@ -44,17 +46,28 @@ public class DownloadPetabCommand implements Runnable {
       System.out.println("Found dataset, downloading.");
       System.out.println();
 
-      openbis.downloadDataset(outputPath, datasetCode);
+      final String tmpPath = "tmp/";
 
-      PetabParser parser = new PetabParser();
-      try {
-        System.out.println("Adding dataset identifier to metaInformation.yaml.");
-        parser.addDatasetId(outputPath, datasetCode);
-      } catch (IOException e) {
-        System.out.println("Could not add dataset identifier.");
-        throw new RuntimeException(e);
-      }
+      File downloadFolder = openbis.downloadDataset(tmpPath, datasetCode);
+
+
+
+      cleanupTemp(new File(tmpPath));
+
       System.out.println("Done");
     }
+
+  private void cleanupTemp(File tmpFolder) {
+    File[] files = tmpFolder.listFiles();
+    if (files != null) { //some JVMs return null for empty dirs
+      for (File f : files) {
+        if (f.isDirectory()) {
+          cleanupTemp(f);
+        } else {
+          f.delete();
+        }
+      }
+    }
+  }
 
 }

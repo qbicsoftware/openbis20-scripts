@@ -50,7 +50,7 @@ public class SpaceStatisticsCommand implements Runnable {
       } else {
         summary.add("Querying samples in all available spaces...");
       }
-      OpenBIS authentication = App.loginToOpenBIS(auth.getPassword(), auth.getUser(), auth.getAS());
+      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getAS());
       OpenbisConnector openbis = new OpenbisConnector(authentication);
 
       if (spaces.isEmpty()) {

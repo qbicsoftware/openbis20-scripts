@@ -43,7 +43,7 @@ public class SampleHierarchyCommand implements Runnable {
         } else {
           summary.add("Querying samples in all available spaces...");
         }
-        OpenBIS authentication = App.loginToOpenBIS(auth.getPassword(), auth.getUser(), auth.getAS());
+        OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getAS());
         OpenbisConnector openbis = new OpenbisConnector(authentication);
         Map<SampleTypeConnection, Integer> hierarchy = openbis.queryFullSampleHierarchy(spaces);
 

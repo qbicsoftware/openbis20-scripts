@@ -15,6 +15,7 @@ import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.search.ExperimentSear
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.SampleType;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.fetchoptions.SampleFetchOptions;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.id.SampleIdentifier;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.search.SampleSearchCriteria;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.Space;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.fetchoptions.SpaceFetchOptions;
@@ -37,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import life.qbic.model.SampleTypeConnection;
 import org.apache.logging.log4j.LogManager;
@@ -45,7 +47,10 @@ import org.apache.logging.log4j.Logger;
 public class OpenbisConnector {
 
   private static final Logger LOG = LogManager.getLogger(OpenbisConnector.class);
-  OpenBIS openBIS;
+  private final OpenBIS openBIS;
+
+  public final static Pattern experimentIdPattern = Pattern.compile("\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+");
+  public final static Pattern sampleIdPattern = Pattern.compile("\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+");
 
   public OpenbisConnector(OpenBIS authentication) {
     this.openBIS = authentication;
@@ -58,16 +63,10 @@ public class OpenbisConnector {
         .stream().map(Space::getCode).collect(Collectors.toList());
   }
 
-  public DataSetPermId registerDataset(Path uploadPath, String experimentID,
+  public DataSetPermId registerDatasetForExperiment(Path uploadPath, String experimentID,
       List<String> parentCodes) {
-    final String uploadId = openBIS.uploadFileWorkspaceDSS(uploadPath);
-
-    final UploadedDataSetCreation creation = new UploadedDataSetCreation();
-    creation.setUploadId(uploadId);
+    UploadedDataSetCreation creation = prepareDataSetCreation(uploadPath, parentCodes);
     creation.setExperimentId(new ExperimentIdentifier(experimentID));
-    creation.setParentIds(parentCodes.stream().map(DataSetPermId::new).collect(
-        Collectors.toList()));
-    creation.setTypeId(new EntityTypePermId("UNKNOWN", EntityKind.DATA_SET));
 
     try {
       return openBIS.createUploadedDataSet(creation);
@@ -75,6 +74,30 @@ public class OpenbisConnector {
       LOG.error(e.getMessage());
     }
     return null;
+  }
+
+  public DataSetPermId registerDatasetForSample(Path uploadPath, String sampleID,
+      List<String> parentCodes) {
+    UploadedDataSetCreation creation = prepareDataSetCreation(uploadPath, parentCodes);
+    creation.setSampleId(new SampleIdentifier(sampleID));
+
+    try {
+      return openBIS.createUploadedDataSet(creation);
+    } catch (final Exception e) {
+      LOG.error(e.getMessage());
+    }
+    return null;
+  }
+
+  private UploadedDataSetCreation prepareDataSetCreation(Path uploadPath, List<String> parentCodes) {
+    final String uploadId = openBIS.uploadFileWorkspaceDSS(uploadPath);
+
+    final UploadedDataSetCreation creation = new UploadedDataSetCreation();
+    creation.setUploadId(uploadId);
+    creation.setParentIds(parentCodes.stream().map(DataSetPermId::new).collect(
+        Collectors.toList()));
+    creation.setTypeId(new EntityTypePermId("UNKNOWN", EntityKind.DATA_SET));
+    return creation;
   }
 
   private static void copyInputStreamToFile(InputStream inputStream, File file)
@@ -103,7 +126,7 @@ public class OpenbisConnector {
     return openBIS.searchDataSets(criteria, options).getObjects();
   }
 
-  public void downloadDataset(String targetPath, String datasetID) {
+  public File downloadDataset(String targetPath, String datasetID) {
     DataSetFileDownloadOptions options = new DataSetFileDownloadOptions();
     IDataSetFileId fileToDownload = new DataSetFilePermId(new DataSetPermId(datasetID),
         "");
@@ -135,6 +158,7 @@ public class OpenbisConnector {
         }
       }
     }
+    return new File(targetPath);
   }
 
   public Map<SampleTypeConnection, Integer> queryFullSampleHierarchy(List<String> spaces) {
@@ -357,4 +381,11 @@ public class OpenbisConnector {
         .isEmpty();
   }
 
+  public boolean sampleExists(String objectID) {
+    SampleSearchCriteria criteria = new SampleSearchCriteria();
+    criteria.withIdentifier().thatEquals(objectID);
+
+    return !openBIS.searchSamples(criteria, new SampleFetchOptions()).getObjects()
+        .isEmpty();
+  }
 }
