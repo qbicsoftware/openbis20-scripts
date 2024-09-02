@@ -68,7 +68,7 @@ public class UploadDatasetCommand implements Runnable {
         System.out.printf("Dataset %s was successfully attached to experiment%n", result.getPermId());
       } else {
         DataSetPermId result = openbis.registerDatasetForSample(Path.of(dataPath), objectID, parents);
-        System.out.printf("Dataset %s was successfully created%n", result.getPermId());
+        System.out.printf("Dataset %s was successfully attached to sample%n", result.getPermId());
       }
     }
 
