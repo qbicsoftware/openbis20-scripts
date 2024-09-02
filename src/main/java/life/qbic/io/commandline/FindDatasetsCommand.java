@@ -39,7 +39,7 @@ public class FindDatasetsCommand implements Runnable {
       } else {
         System.out.println("Querying experiment in all available spaces...");
       }
-      OpenBIS authentication = App.loginToOpenBIS(auth.getPassword(), auth.getUser(), auth.getAS());
+      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getAS());
       OpenbisConnector openbis = new OpenbisConnector(authentication);
       List<DataSet> datasets = openbis.listDatasetsOfExperiment(spaces, experimentCode).stream()
           .sorted(Comparator.comparing(

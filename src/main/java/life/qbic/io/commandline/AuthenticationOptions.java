@@ -21,9 +21,9 @@ public class AuthenticationOptions {
   @Option(
       names = {"-u", "--user"},
       description = "openBIS user name")
-  private String user;
+  private String openbisUser;
   @ArgGroup(multiplicity = "1") // ensures the password is provided once with at least one of the possible options.
-  PasswordOptions passwordOptions;
+  PasswordOptions openbisPasswordOptions;
 
   @Option(
       names = {"-as", "-as_url"},
@@ -43,11 +43,23 @@ public class AuthenticationOptions {
       scope = CommandLine.ScopeType.INHERIT)
   public String configPath;
 
-  public String getUser() {
-    if(user == null & configPath!=null && !configPath.isBlank()) {
-      user = ReadProperties.getProperties(configPath).get("user");
+  @Option(
+      names = {"-seek-server", "-seek_url"},
+      description = "SEEK API URL",
+      scope = CommandLine.ScopeType.INHERIT)
+  private String seek_url;
+
+  public String getOpenbisUser() {
+    if(openbisUser == null & configPath!=null && !configPath.isBlank()) {
+      openbisUser = ReadProperties.getProperties(configPath).get("user");
     }
-    return user;
+    return openbisUser;
+  }
+
+  public String getSeekURL() {
+    log.error("No URL to the SEEK address provided.");
+    System.exit(2);
+    return seek_url;
   }
 
   public String getDSS() {
@@ -64,8 +76,8 @@ public class AuthenticationOptions {
     return as_url;
   }
 
-  public char[] getPassword() {
-    return passwordOptions.getPassword();
+  public char[] getOpenbisPassword() {
+    return openbisPasswordOptions.getPassword();
   }
 
   /**
@@ -110,7 +122,7 @@ public class AuthenticationOptions {
   @Override
   public String toString() {
     return new StringJoiner(", ", AuthenticationOptions.class.getSimpleName() + "[", "]")
-        .add("user='" + user + "'")
+        .add("user='" + openbisUser + "'")
         .toString();
     //ATTENTION: do not expose the password here!
   }

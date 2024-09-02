@@ -33,11 +33,15 @@ public class UploadPetabResultCommand implements Runnable {
 
     @Override
     public void run() {
-      OpenBIS authentication = App.loginToOpenBIS(auth.getPassword(), auth.getUser(), auth.getAS(), auth.getDSS());
+      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getAS(), auth.getDSS());
       openbis = new OpenbisConnector(authentication);
 
       if(!pathValid(dataPath)) {
         System.out.printf("Path %s could not be found%n", dataPath);
+        return;
+      }
+      if(!new File(dataPath).isDirectory()) {
+        System.out.printf("%s is not a directory. Please specify the PETab directory root%n", dataPath);
         return;
       }
       if(!experimentExists(experimentID)) {
@@ -60,7 +64,7 @@ public class UploadPetabResultCommand implements Runnable {
       }
       System.out.println("Uploading dataset...");
       //TODO copy and remove source references here
-      DataSetPermId result = openbis.registerDataset(Path.of(dataPath), experimentID, parents);
+      DataSetPermId result = openbis.registerDatasetForExperiment(Path.of(dataPath), experimentID, parents);
       System.out.printf("Dataset %s was successfully created%n", result.getPermId());
     }
 
