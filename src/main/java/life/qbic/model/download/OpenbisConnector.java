@@ -25,8 +25,10 @@ import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.DataSetFile;
 import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.download.DataSetFileDownload;
 import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.download.DataSetFileDownloadOptions;
 import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.download.DataSetFileDownloadReader;
+import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.fetchoptions.DataSetFileFetchOptions;
 import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.id.DataSetFilePermId;
 import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.id.IDataSetFileId;
+import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.search.DataSetFileSearchCriteria;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -40,6 +42,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import life.qbic.model.DatasetWithProperties;
+import life.qbic.model.OpenbisExperimentWithDescendants;
 import life.qbic.model.SampleTypeConnection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,8 +53,9 @@ public class OpenbisConnector {
   private static final Logger LOG = LogManager.getLogger(OpenbisConnector.class);
   private final OpenBIS openBIS;
 
-  public final static Pattern experimentIdPattern = Pattern.compile("\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+");
-  public final static Pattern sampleIdPattern = Pattern.compile("\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+");
+  //public final static Pattern experimentIdPattern = Pattern.compile("\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+");
+  //public final static Pattern sampleIdPattern = Pattern.compile("\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+");
+  public static Pattern datasetCodePattern = Pattern.compile("[0-9]^{17}-[0-9]+");
 
   public OpenbisConnector(OpenBIS authentication) {
     this.openBIS = authentication;
@@ -159,6 +164,22 @@ public class OpenbisConnector {
       }
     }
     return new File(targetPath);
+  }
+
+  public InputStream streamDataset(String datasetCode, String filePath) {
+    DataSetFileDownloadOptions options = new DataSetFileDownloadOptions();
+    IDataSetFileId fileToDownload = new DataSetFilePermId(new DataSetPermId(datasetCode),
+        filePath);
+
+    // Setting recursive flag to true will return both subfolders and files
+    options.setRecursive(true);
+
+    // Read the contents and print them out
+    InputStream stream = openBIS.downloadFiles(new ArrayList<>(List.of(fileToDownload)),
+        options);
+
+    DataSetFileDownloadReader reader = new DataSetFileDownloadReader(stream);
+    return reader.read().getInputStream();
   }
 
   public Map<SampleTypeConnection, Integer> queryFullSampleHierarchy(List<String> spaces) {
@@ -370,7 +391,12 @@ public class OpenbisConnector {
     criteria.withCodes().thatIn(codes);
     DataSetFetchOptions options = new DataSetFetchOptions();
     options.withExperiment();
+    options.withType();
     return openBIS.searchDataSets(criteria, options).getObjects();
+  }
+
+  public boolean datasetExists(String code) {
+    return !findDataSets(new ArrayList<>(Arrays.asList(code))).isEmpty();
   }
 
   public boolean experimentExists(String experimentID) {
@@ -387,5 +413,46 @@ public class OpenbisConnector {
 
     return !openBIS.searchSamples(criteria, new SampleFetchOptions()).getObjects()
         .isEmpty();
+  }
+
+  public OpenbisExperimentWithDescendants getExperimentWithDescendants(String experimentID) {
+    ExperimentSearchCriteria criteria = new ExperimentSearchCriteria();
+    criteria.withIdentifier().thatEquals(experimentID);
+
+    ExperimentFetchOptions fetchOptions = new ExperimentFetchOptions();
+    fetchOptions.withType();
+    fetchOptions.withProject();
+    fetchOptions.withProperties();
+    DataSetFetchOptions dataSetFetchOptions = new DataSetFetchOptions();
+    dataSetFetchOptions.withType();
+    dataSetFetchOptions.withRegistrator();
+    SampleFetchOptions sampleFetchOptions = new SampleFetchOptions();
+    sampleFetchOptions.withProperties();
+    sampleFetchOptions.withDataSetsUsing(dataSetFetchOptions);
+    fetchOptions.withDataSetsUsing(dataSetFetchOptions);
+    fetchOptions.withSamplesUsing(sampleFetchOptions);
+
+    Experiment experiment = openBIS.searchExperiments(criteria, fetchOptions).getObjects().get(0);
+
+    Map<DataSetPermId, List<DataSetFile>> datasetCodeToFiles = new HashMap<>();
+    for(DataSet dataset : experiment.getDataSets()) {
+      datasetCodeToFiles.put(dataset.getPermId(), getDatasetFiles(dataset));
+    }
+
+    return new OpenbisExperimentWithDescendants(experiment, experiment.getSamples(),
+        experiment.getDataSets()
+            .stream().map(DatasetWithProperties::new)
+            .collect(Collectors.toList()), datasetCodeToFiles);
+  }
+
+  public List<DataSetFile> getDatasetFiles(DataSet dataset) {
+    DataSetFileSearchCriteria criteria = new DataSetFileSearchCriteria();
+
+    DataSetSearchCriteria dataSetCriteria = criteria.withDataSet().withOrOperator();
+    dataSetCriteria.withCode().thatEquals(dataset.getCode());
+
+    SearchResult<DataSetFile> result = openBIS.searchFiles(criteria, new DataSetFileFetchOptions());
+
+    return result.getObjects();
   }
 }
