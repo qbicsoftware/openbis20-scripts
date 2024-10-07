@@ -32,28 +32,20 @@ public class UploadDatasetCommand implements Runnable {
 
     @Override
     public void run() {
-      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getAS(), auth.getDSS());
+      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getOpenbisAS(), auth.getOpenbisDSS());
       openbis = new OpenbisConnector(authentication);
 
       if(!pathValid(dataPath)) {
         System.out.printf("Path %s could not be found%n", dataPath);
         return;
       }
-      boolean attachToSample = OpenbisConnector.sampleIdPattern.matcher(objectID).find();
-      boolean attachToExperiment = false;
-      if(!attachToSample) {
-        attachToExperiment = OpenbisConnector.experimentIdPattern.matcher(objectID).find();
+      boolean attachToSample = false;
+      boolean attachToExperiment = experimentExists(objectID);
+      if(sampleExists(objectID)) {
+        attachToSample = true;
       }
-      if(!attachToExperiment && !attachToSample) {
-        System.out.printf("%s is neither a valid experiment nor sample identifier%n", objectID);
-        return;
-      }
-      if(attachToExperiment && !experimentExists(objectID)) {
-        System.out.printf("Experiment with identifier %s could not be found%n", objectID);
-        return;
-      }
-      if(attachToSample && !sampleExists(objectID)) {
-        System.out.printf("Sample object with identifier %s could not be found%n", objectID);
+      if(!attachToSample && !attachToExperiment) {
+        System.out.printf("%s could not be found in openBIS.%n", objectID);
         return;
       }
       if(!datasetsExist(parents)) {
