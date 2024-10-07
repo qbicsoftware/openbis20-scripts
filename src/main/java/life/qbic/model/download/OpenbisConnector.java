@@ -12,11 +12,15 @@ import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.fetchoptions.ExperimentFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.id.ExperimentIdentifier;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.search.ExperimentSearchCriteria;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.property.PropertyAssignment;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.SampleType;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.fetchoptions.SampleFetchOptions;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.fetchoptions.SampleTypeFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.id.SampleIdentifier;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.id.SamplePermId;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.search.SampleSearchCriteria;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.search.SampleTypeSearchCriteria;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.Space;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.fetchoptions.SpaceFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.search.SpaceSearchCriteria;
@@ -37,14 +41,18 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import life.qbic.App;
 import life.qbic.model.DatasetWithProperties;
 import life.qbic.model.OpenbisExperimentWithDescendants;
 import life.qbic.model.SampleTypeConnection;
+import life.qbic.model.SampleTypesAndMaterials;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -428,15 +436,16 @@ public class OpenbisConnector {
     dataSetFetchOptions.withRegistrator();
     SampleFetchOptions sampleFetchOptions = new SampleFetchOptions();
     sampleFetchOptions.withProperties();
+    sampleFetchOptions.withType().withPropertyAssignments().withPropertyType();
     sampleFetchOptions.withDataSetsUsing(dataSetFetchOptions);
     fetchOptions.withDataSetsUsing(dataSetFetchOptions);
     fetchOptions.withSamplesUsing(sampleFetchOptions);
 
     Experiment experiment = openBIS.searchExperiments(criteria, fetchOptions).getObjects().get(0);
 
-    Map<DataSetPermId, List<DataSetFile>> datasetCodeToFiles = new HashMap<>();
+    Map<String, List<DataSetFile>> datasetCodeToFiles = new HashMap<>();
     for(DataSet dataset : experiment.getDataSets()) {
-      datasetCodeToFiles.put(dataset.getPermId(), getDatasetFiles(dataset));
+      datasetCodeToFiles.put(dataset.getPermId().getPermId(), getDatasetFiles(dataset));
     }
 
     return new OpenbisExperimentWithDescendants(experiment, experiment.getSamples(),
@@ -454,5 +463,32 @@ public class OpenbisConnector {
     SearchResult<DataSetFile> result = openBIS.searchFiles(criteria, new DataSetFileFetchOptions());
 
     return result.getObjects();
+  }
+
+  public SampleTypesAndMaterials getSampleTypesWithMaterials() {
+    SampleTypeSearchCriteria criteria = new SampleTypeSearchCriteria();
+    SampleTypeFetchOptions typeOptions = new SampleTypeFetchOptions();
+    typeOptions.withPropertyAssignments().withPropertyType();
+    typeOptions.withPropertyAssignments().withEntityType();
+    Set<SampleType> sampleTypes = new HashSet<>();
+    Set<SampleType> sampleTypesAsMaterials = new HashSet<>();
+    for(SampleType type : openBIS.searchSampleTypes(criteria, typeOptions).getObjects()) {
+      /*
+      System.err.println("sample type: "+type.getCode());
+      for(PropertyAssignment assignment : type.getPropertyAssignments()) {
+        if (assignment.getPropertyType().getDataType().name().equals("SAMPLE")) {
+          System.err.println(assignment.getPropertyType().getLabel());
+          System.err.println(assignment.getPropertyType().getDataType().name());
+          System.err.println(assignment.getPropertyType().getCode());
+        }
+      }
+       */
+      if(type.getCode().startsWith("MATERIAL.")) {
+        sampleTypesAsMaterials.add(type);
+      } else {
+        sampleTypes.add(type);
+      }
+    }
+    return new SampleTypesAndMaterials(sampleTypes, sampleTypesAsMaterials);
   }
 }

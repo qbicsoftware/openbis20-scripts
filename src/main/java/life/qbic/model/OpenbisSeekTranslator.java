@@ -4,20 +4,36 @@ import static java.util.Map.entry;
 
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.DataSet;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.property.DataType;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.property.PropertyAssignment;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.SampleType;
+import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.DataSetFile;
+import java.io.File;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import life.qbic.model.isa.GenericSeekAsset;
+import life.qbic.model.isa.ISAAssay;
 import life.qbic.model.isa.ISADataFile;
 import life.qbic.model.isa.ISASample;
+import life.qbic.model.isa.ISASampleType;
+import life.qbic.model.isa.ISASampleType.SampleAttribute;
+import life.qbic.model.isa.ISASampleType.SampleAttributeType;
+import life.qbic.model.isa.SeekStructure;
 
 public class OpenbisSeekTranslator {
 
   private final String DEFAULT_PROJECT_ID;
   private final String DEFAULT_STUDY_ID;
+  private final String DEFAULT_TRANSFERRED_SAMPLE_TITLE = "openBIS Name";
 
   public OpenbisSeekTranslator(String defaultProjectID, String defaultStudyID) {
     this.DEFAULT_PROJECT_ID = defaultProjectID;
@@ -34,9 +50,27 @@ public class OpenbisSeekTranslator {
       entry("04_MICRO_CT", "EXP")
   );
 
+  Map<DataType, SampleAttributeType> dataTypeToAttributeType = Map.ofEntries(
+      entry(DataType.INTEGER, new SampleAttributeType("4", "Integer", "Integer")),
+      entry(DataType.VARCHAR, new SampleAttributeType("8", "String", "String")),
+      entry(DataType.MULTILINE_VARCHAR, new SampleAttributeType("7", "Text", "Text")),
+      entry(DataType.REAL, new SampleAttributeType("3", "Real number", "Float")),
+      entry(DataType.TIMESTAMP, new SampleAttributeType("1", "Date time", "DateTime")),
+      entry(DataType.BOOLEAN, new SampleAttributeType("16", "Boolean", "Boolean")),
+      entry(DataType.CONTROLLEDVOCABULARY, //we use String for now
+          new SampleAttributeType("8", "String", "String")),
+      entry(DataType.MATERIAL, //not used anymore in this form
+          new SampleAttributeType("8", "String", "String")),
+      entry(DataType.HYPERLINK, new SampleAttributeType("8", "String", "String")),
+      entry(DataType.XML, new SampleAttributeType("7", "Text", "Text")),
+      entry(DataType.SAMPLE, //should be handled before mapping types
+          new SampleAttributeType("8", "String", "String")),
+      entry(DataType.DATE, new SampleAttributeType("2", "Date time", "Date"))
+  );
+
   Map<String, String> experimentTypeToAssayType = Map.ofEntries(
       entry("00_MOUSE_DATABASE", ""),
-      entry("00_PATIENT_DATABASE", ""),//if this is related to measured data, attach it as sample to the assay
+      entry("00_PATIENT_DATABASE", ""),
       entry("00_STANDARD_OPERATING_PROTOCOLS", ""),
       entry("01_BIOLOGICAL_EXPERIMENT", "http://jermontology.org/ontology/JERMOntology#Cultivation_experiment"),
       entry("02_MASSSPECTROMETRY_EXPERIMENT", "http://jermontology.org/ontology/JERMOntology#Proteomics"),
@@ -55,67 +89,128 @@ public class OpenbisSeekTranslator {
       );
 
   Map<String, String> datasetTypeToAssetType = Map.ofEntries(
-      entry("ANALYSIS_NOTEBOOK", "Document"),
-      entry("ANALYZED_DATA", "Data_file"),
-      entry("ATTACHMENT", "Document"),
+      entry("ANALYSIS_NOTEBOOK", "documents"),
+      entry("ANALYZED_DATA", "data_files"),
+      entry("ATTACHMENT", "documents"),
       entry("ELN_PREVIEW", ""),
-      entry("EXPERIMENT_PROTOCOL", "SOP"),
-      entry("EXPERIMENT_RESULT", "Document"),
-      entry("HISTOLOGICAL_SLIDE", "Data_file"),
-      entry("IB_DATA", "Data_file"),
-      entry("LUMINEX_DATA", "Data_file"),
-      entry("MS_DATA_ANALYZED", "Data_file"),
-      entry("MS_DATA_RAW", "Data_file"),
-      entry("OTHER_DATA", "Document"),
-      entry("PROCESSED_DATA", "Data_file"),
-      entry("PUBLICATION_DATA", "Publication"),
-      entry("QPCR_DATA", "Data_file"),
-      entry("RAW_DATA", "Data_file"),
-      entry("SOURCE_CODE", "Document"),
+      entry("EXPERIMENT_PROTOCOL", "sops"),
+      entry("EXPERIMENT_RESULT", "documents"),
+      entry("HISTOLOGICAL_SLIDE", "data_files"),
+      entry("IB_DATA", "data_files"),
+      entry("LUMINEX_DATA", "data_files"),
+      entry("MS_DATA_ANALYZED", "data_files"),
+      entry("MS_DATA_RAW", "data_files"),
+      entry("OTHER_DATA", "data_files"),
+      entry("PROCESSED_DATA", "data_files"),
+      entry("PUBLICATION_DATA", "publications"),
+      entry("QPCR_DATA", "data_files"),
+      entry("RAW_DATA", "data_files"),
+      entry("SOURCE_CODE", "documents"),
       entry("TEST_CONT", ""),
       entry("TEST_DAT", ""),
-      entry("UNKNOWN", "")
+      entry("UNKNOWN", "data_files")
   );
 
-  public SeekStructure translate(String seekNode, Experiment experimentWithSamplesAndDatasets) {
-    Experiment exp = experimentWithSamplesAndDatasets;
-    exp.getType();
-    return null;
-    //new ISAAssay(exp.getCode(), )
-  }
-
-  public ISADataFile translate(String seekNode, DataSet dataset) {
-    return null; //new ISADataFile();
+  public ISASampleType translate(SampleType sampleType) {
+    SampleAttribute titleAttribute = new SampleAttribute(DEFAULT_TRANSFERRED_SAMPLE_TITLE,
+        dataTypeToAttributeType.get(DataType.VARCHAR), true, false);
+    ISASampleType type = new ISASampleType(sampleType.getCode(), titleAttribute,
+        DEFAULT_PROJECT_ID);
+    for (PropertyAssignment a : sampleType.getPropertyAssignments()) {
+      DataType dataType = a.getPropertyType().getDataType();
+      type.addSampleAttribute(a.getPropertyType().getLabel(), dataTypeToAttributeType.get(dataType),
+          false, null);
+    }
+    return type;
   }
 
   public String assetForDatasetType(String datasetType) {
-    return "Data_file";//TODO
+    if(datasetTypeToAssetType.get(datasetType) == null || datasetTypeToAssetType.get(datasetType).isBlank()) {
+      throw new RuntimeException("Dataset type " + datasetType + " could not be mapped to SEEK type.");
+    }
+    return datasetTypeToAssetType.get(datasetType);
   }
 
   public String dataFormatAnnotationForExtension(String fileExtension) {
     return fileExtensionToDataFormat.get(fileExtension);
   }
 
-  public SeekStructure translate(Experiment experiment, List<String> blacklist) {
-    System.err.println(experiment.getCode());
+  public SeekStructure translate(OpenbisExperimentWithDescendants experiment,
+      Map<String, String> sampleTypesToIds, Set<String> blacklist) throws URISyntaxException {
 
+    Experiment exp = experiment.getExperiment();
+    String expType = exp.getType().getCode();
+    String title = exp.getCode()+" ("+exp.getPermId().getPermId()+")";
+    ISAAssay assay = new ISAAssay(title, DEFAULT_STUDY_ID, experimentTypeToAssayClass.get(expType),
+        new URI(experimentTypeToAssayType.get(expType)));//TODO
+
+    List<ISASample> samples = new ArrayList<>();
     for(Sample sample : experiment.getSamples()) {
-      String sampleType = getSampleType(sample.getType());
+      SampleType sampleType = sample.getType();
+
+      //try to put all attributes into sample properties, as they should be a 1:1 mapping
+      Map<String, String> typeCodesToNames = new HashMap<>();
+      for (PropertyAssignment a : sampleType.getPropertyAssignments()) {
+        typeCodesToNames.put(a.getPropertyType().getCode(), a.getPropertyType().getLabel());
+      }
       Map<String, Object> attributes = new HashMap<>();
-      ISASample isaSample = new ISASample(attributes, sampleType,
+      for(String code : sample.getProperties().keySet()) {
+        attributes.put(typeCodesToNames.get(code), sample.getProperties().get(code));
+      }
+
+      attributes.put(DEFAULT_TRANSFERRED_SAMPLE_TITLE, sample.getIdentifier().getIdentifier());
+      String sampleTypeId = sampleTypesToIds.get(sampleType.getCode());
+      ISASample isaSample = new ISASample(sample.getPermId().getPermId(), attributes, sampleTypeId,
           Collections.singletonList(DEFAULT_PROJECT_ID));
-      System.err.println(sample.getCode());
+      samples.add(isaSample);
     }
-    for(DataSet dataset : experiment.getDataSets()) {
-      System.err.println(dataset.getCode());
+    Map<GenericSeekAsset, DataSetFile> isaToOpenBISFile = new HashMap<>();
+
+    //create ISA files for assets. If actual data is uploaded is determined later based upon flag
+    for(DatasetWithProperties dataset : experiment.getDatasets()) {
+      String permID = dataset.getCode();
+      if(!blacklist.contains(permID)) {
+        for(DataSetFile file : experiment.getFilesForDataset(permID)) {
+          String datasetType = getDatasetTypeOfFile(file, experiment.getDatasets());
+          datasetFileToSeekAsset(file, datasetType)
+              .ifPresent(seekAsset -> isaToOpenBISFile.put(seekAsset, file));
+        }
+      }
     }
-    System.err.println("blacklisted:");
-    for(String dataset : blacklist) {
-      System.err.println(dataset);
-    }
-    return null;//TODO
+    return new SeekStructure(assay, samples, isaToOpenBISFile);
   }
 
-  private String getSampleType(SampleType type) {
+  private String getDatasetTypeOfFile(DataSetFile file, List<DatasetWithProperties> dataSets) {
+    String permId = file.getDataSetPermId().getPermId();
+    for(DatasetWithProperties dataset : dataSets) {
+      if(dataset.getCode().equals(permId)) {
+        return dataset.getType().getCode();
+      }
+    }
+    return "";
   }
+
+  /**
+   * Creates a SEEK asset from an openBIS DataSetFile, if it describes a file (not a folder).
+   * @param file the openBIS DataSetFile
+   * @return an optional SEEK asset
+   */
+  private Optional<GenericSeekAsset> datasetFileToSeekAsset(DataSetFile file, String datasetType) {
+    if (!file.getPath().isBlank() && !file.isDirectory()) {
+      File f = new File(file.getPath());
+      String datasetCode = file.getDataSetPermId().toString();
+      String assetName = datasetCode + ": " + f.getName();
+      String assetType = assetForDatasetType(datasetType);
+      GenericSeekAsset isaFile = new GenericSeekAsset(assetType, assetName, file.getPath(),
+          Arrays.asList(DEFAULT_PROJECT_ID));
+      String fileExtension = f.getName().substring(f.getName().lastIndexOf(".") + 1);
+      String annotation = dataFormatAnnotationForExtension(fileExtension);
+      if (annotation != null) {
+        isaFile.withDataFormatAnnotations(Arrays.asList(annotation));
+      }
+      return Optional.of(isaFile);
+    }
+    return Optional.empty();
+  }
+
 }

@@ -88,15 +88,6 @@ public class ISAAssay extends AbstractISAObject {
     return attributes;
   }
 
-  public static void main(String[] args) throws JsonProcessingException, URISyntaxException {
-    ISAAssay assay = new ISAAssay("title", "1",
-        "EXP",
-        new URI("http://jermontology.org/ontology/JERMOntology#RNA-Seq"));
-    assay.setCreatorIDs(Arrays.asList(3,2));
-    assay.setOrganismIDs(Arrays.asList(123,3332));
-    System.err.println(assay.toJson());
-  }
-
   private class Relationships {
 
     private String studyId;

@@ -12,10 +12,10 @@ public class OpenbisExperimentWithDescendants {
   private Experiment experiment;
   private List<Sample> samples;
   private List<DatasetWithProperties> datasets;
-  private Map<DataSetPermId, List<DataSetFile>> datasetCodeToFiles;
+  private Map<String, List<DataSetFile>> datasetCodeToFiles;
 
   public OpenbisExperimentWithDescendants(Experiment experiment, List<Sample> samples,
-      List<DatasetWithProperties> datasets, Map<DataSetPermId, List<DataSetFile>> datasetCodeToFiles) {
+      List<DatasetWithProperties> datasets, Map<String, List<DataSetFile>> datasetCodeToFiles) {
     this.experiment = experiment;
     this.samples = samples;
     this.datasets = datasets;

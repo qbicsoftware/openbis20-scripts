@@ -1,11 +1,8 @@
-package life.qbic.model;
+package life.qbic.model.isa;
 
 import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.DataSetFile;
 import java.util.List;
 import java.util.Map;
-import life.qbic.model.isa.GenericSeekAsset;
-import life.qbic.model.isa.ISAAssay;
-import life.qbic.model.isa.ISASample;
 
 public class SeekStructure {
 

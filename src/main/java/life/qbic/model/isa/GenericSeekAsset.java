@@ -7,38 +7,39 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
- * Model class for ISA Data files. Contains all mandatory and some optional properties and attributes
- * that are needed to create a data file in SEEK. The model and its getters (names) are structured in a
+ * Model class for Seek assets. Contains all mandatory and some optional properties and attributes
+ * that are needed to create an asset in SEEK. The model and its getters (names) are structured in a
  * way to enable the easy translation to JSON to use in SEEK queries.
  * Mandatory parameters are found in the constructor, optional attributes can be set using
- * withAttribute(attribute) notation.
+ * withAttribute(attribute) notation. Since there are different types of assets, the isaType is a
+ * parameter here.
  */
-public class ISADataFile extends AbstractISAObject {
+public class GenericSeekAsset extends AbstractISAObject {
 
   private Attributes attributes;
   private Relationships relationships;
-  private final String ISA_TYPE = "data_files";
+  private String assetType;
 
-  public ISADataFile(String title, String fileName, List<String> projectIds) {
+  public GenericSeekAsset(String assetType, String title, String fileName, List<String> projectIds) {
+    this.assetType = assetType;
     this.attributes = new Attributes(title, fileName);
     this.relationships = new Relationships(projectIds);
   }
 
-  public ISADataFile withOtherCreators(String otherCreators) {
+  public GenericSeekAsset withOtherCreators(String otherCreators) {
     this.attributes.otherCreators = otherCreators;
     return this;
   }
 
-  public ISADataFile withAssays(List<String> assays) {
+  public GenericSeekAsset withAssays(List<String> assays) {
     this.relationships.assays = assays;
     return this;
   }
 
-  public ISADataFile withDataFormatAnnotations(List<String> identifiers) {
+  public GenericSeekAsset withDataFormatAnnotations(List<String> identifiers) {
     this.attributes.withDataFormatAnnotations(identifiers);
     return this;
   }
@@ -50,7 +51,7 @@ public class ISADataFile extends AbstractISAObject {
   }
 
   public String getType() {
-    return ISA_TYPE;
+    return assetType;
   }
 
   public Relationships getRelationships() {

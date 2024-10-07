@@ -65,12 +65,6 @@ public class ISAStudy extends AbstractISAObject {
     return attributes;
   }
 
-  public static void main(String[] args) throws JsonProcessingException {
-    ISAStudy study = new ISAStudy("title", "1");
-    study.setCreatorIDs(Arrays.asList(3,2));
-    System.err.println(study.toJson());
-  }
-
   private class Relationships {
 
     private String investigationId;

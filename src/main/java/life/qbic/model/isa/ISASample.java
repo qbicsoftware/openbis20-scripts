@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,9 +24,10 @@ public class ISASample extends AbstractISAObject {
   private Relationships relationships;
   private final String ISA_TYPE = "samples";
 
-  public ISASample(Map<String, Object> attributeMap, String sampleType, List<String> projectIds) {
-    this.attributes = new Attributes(attributeMap);
-    this.relationships = new Relationships(sampleType, projectIds);
+  public ISASample(String title, Map<String, Object> attributeMap, String sampleTypeId,
+      List<String> projectIds) {
+    this.attributes = new Attributes(title, attributeMap);
+    this.relationships = new Relationships(sampleTypeId, projectIds);
   }
 
   public ISASample withOtherCreators(String otherCreators) {
@@ -61,26 +61,20 @@ public class ISASample extends AbstractISAObject {
     return attributes;
   }
 
-  public static void main(String[] args) throws JsonProcessingException {
-    ISASample sample = new ISASample(new HashMap<>(), "1", Arrays.asList("1"));
-    sample.setCreatorIDs(Arrays.asList("3","2"));
-    System.err.println(sample.toJson());
-  }
-
   private class Relationships {
 
-    private String sampleType;
+    private String sampleTypeId;
     private List<String> projects;
     private List<String> creators = new ArrayList<>();
     private List<String> assays = new ArrayList<>();
 
-    public Relationships(String sampleType, List<String> projects) {
+    public Relationships(String sampleTypeId, List<String> projects) {
       this.projects = projects;
-      this.sampleType = sampleType;
+      this.sampleTypeId = sampleTypeId;
     }
 
     public String getSample_type() {
-      return sampleType;
+      return sampleTypeId;
     }
 
     public List<String> getAssays() {
@@ -120,7 +114,7 @@ public class ISASample extends AbstractISAObject {
       jsonGenerator.writeStartObject();
       jsonGenerator.writeObjectFieldStart("sample_type");
       jsonGenerator.writeObjectFieldStart("data");
-      jsonGenerator.writeStringField("id", relationships.sampleType);
+      jsonGenerator.writeStringField("id", relationships.sampleTypeId);
       jsonGenerator.writeStringField("type", "sample_types");
       jsonGenerator.writeEndObject();
       jsonGenerator.writeEndObject();
@@ -151,9 +145,15 @@ public class ISASample extends AbstractISAObject {
 
     private Map<String,Object> attributeMap = new HashMap<>();
     private String otherCreators = "";
+    private String title;
 
-    public Attributes(Map<String, Object> attributeMap) {
+    public Attributes(String title, Map<String, Object> attributeMap) {
       this.attributeMap = attributeMap;
+      this.title = title;
+    }
+
+    public String getTitle() {
+      return title;
     }
 
     public Map<String, Object> getAttribute_map() {

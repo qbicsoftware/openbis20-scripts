@@ -8,9 +8,9 @@ import picocli.CommandLine.Option;
 
 // main command with format specifiers for the usage help message
 @Command(name = "openbis-scripts",
-    subcommands = {SampleHierarchyCommand.class, FindDatasetsCommand.class,
+    subcommands = {SampleHierarchyCommand.class, TransferSampleTypesToSeekCommand.class,
         DownloadPetabCommand.class, UploadPetabResultCommand.class, UploadDatasetCommand.class,
-        SpaceStatisticsCommand.class, TransferDataToSeekCommand.class},
+        SpaceStatisticsCommand.class, TransferDataToSeekCommand.class, FindDatasetsCommand.class},
     description = "A client software for querying openBIS.",
     mixinStandardHelpOptions = true, versionProvider = ManifestVersionProvider.class)
 public class CommandLineOptions {

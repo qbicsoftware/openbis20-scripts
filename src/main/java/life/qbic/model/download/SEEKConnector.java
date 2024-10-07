@@ -1,6 +1,7 @@
 package life.qbic.model.download;
 
 import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.DataSetFile;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
@@ -21,12 +22,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import life.qbic.model.AssayWithQueuedAssets;
 import life.qbic.model.OpenbisSeekTranslator;
-import life.qbic.model.SeekStructure;
+import life.qbic.model.isa.SeekStructure;
+import life.qbic.model.isa.GenericSeekAsset;
 import life.qbic.model.isa.ISAAssay;
-import life.qbic.model.isa.ISADataFile;
 import life.qbic.model.isa.ISASample;
+import life.qbic.model.isa.ISASampleType;
 import life.qbic.model.isa.ISAStudy;
+import org.apache.commons.codec.binary.Base64;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,8 +46,8 @@ public class SEEKConnector {
       String defaultStudyTitle) throws URISyntaxException, IOException, InterruptedException {
     this.apiURL = apiURL;
     this.credentials = httpCredentials;
-    translator = new OpenbisSeekTranslator(searchNodeWithTitle("projects", defaultProjectTitle),
-        searchNodeWithTitle("studies", defaultStudyTitle));
+    translator = new OpenbisSeekTranslator("1", //searchNodeWithTitle("projects", defaultProjectTitle),
+        "1");//searchNodeWithTitle("studies", defaultStudyTitle));
   }
 
   public String addAssay(ISAAssay assay)
@@ -55,7 +59,6 @@ public class SEEKConnector {
             BodyHandlers.ofString());
 
     if(response.statusCode()!=200) {
-      System.err.println(response.body());
       throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
     }
     JsonNode rootNode = new ObjectMapper().readTree(response.body());
@@ -103,6 +106,18 @@ public class SEEKConnector {
     return response.statusCode() == 200;
   }
 
+  public void printAttributeTypes() throws URISyntaxException, IOException, InterruptedException {
+    String endpoint = apiURL+"/sample_attribute_types";
+    HttpRequest request = HttpRequest.newBuilder()
+        .uri(new URI(endpoint))
+        .headers("Content-Type", "application/json")
+        .headers("Accept", "application/json")
+        .headers("Authorization", "Basic " + new String(credentials))
+        .GET().build();
+    HttpResponse<String> response = HttpClient.newBuilder().build()
+        .send(request, BodyHandlers.ofString());
+    System.err.println(response.body());
+  }
   /*
   -datatype by extension
 -assay equals experiment
@@ -112,15 +127,31 @@ public class SEEKConnector {
 -flexible object type to sample type?
    */
 
-  public String createSample(ISASample isaSample) throws URISyntaxException, IOException,
+  public void deleteSampleType(String id) throws URISyntaxException, IOException,
       InterruptedException {
-    String endpoint = apiURL+"/samples";
-    HashMap<String, Object> map = new HashMap<>();
-    //map.put("title", "really?");
-    map.put("test_attribute", "okay then");
+    String endpoint = apiURL+"/sample_types";
+    URIBuilder builder = new URIBuilder(endpoint);
+    builder.setParameter("id", id);
 
     HttpResponse<String> response = HttpClient.newBuilder().build()
-        .send(buildAuthorizedPOSTRequest(endpoint, isaSample.toJson()),
+        .send(HttpRequest.newBuilder().uri(builder.build())
+        .headers("Content-Type", "application/json")
+        .headers("Accept", "application/json")
+        .headers("Authorization", "Basic " + new String(credentials))
+        .DELETE().build(), BodyHandlers.ofString());
+
+    if(response.statusCode()!=201) {
+      System.err.println(response.body());
+      throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
+    }
+  }
+
+  public String createSampleType(ISASampleType sampleType) throws URISyntaxException, IOException,
+      InterruptedException {
+    String endpoint = apiURL+"/sample_types";
+
+    HttpResponse<String> response = HttpClient.newBuilder().build()
+        .send(buildAuthorizedPOSTRequest(endpoint, sampleType.toJson()),
             BodyHandlers.ofString());
 
     if(response.statusCode()!=201) {
@@ -133,9 +164,27 @@ public class SEEKConnector {
     return idNode.asText();
   }
 
-  private AssetToUpload createDataFileAsset(String datasetCode, ISADataFile data)
+  public String createSample(ISASample isaSample) throws URISyntaxException, IOException,
+      InterruptedException {
+    String endpoint = apiURL+"/samples";
+
+    HttpResponse<String> response = HttpClient.newBuilder().build()
+        .send(buildAuthorizedPOSTRequest(endpoint, isaSample.toJson()),
+            BodyHandlers.ofString());
+
+    if(response.statusCode()!=200) {
+      System.err.println(response.body());
+      throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
+    }
+    JsonNode rootNode = new ObjectMapper().readTree(response.body());
+    JsonNode idNode = rootNode.path("data").path("id");
+
+    return idNode.asText();
+  }
+
+  private AssetToUpload createDataFileAsset(String datasetCode, GenericSeekAsset data)
       throws IOException, URISyntaxException, InterruptedException {
-    String endpoint = apiURL+"/data_files";
+    String endpoint = apiURL+"/"+data.getType();
 
     HttpResponse<String> response = HttpClient.newBuilder().build()
         .send(buildAuthorizedPOSTRequest(endpoint, data.toJson()),
@@ -228,8 +277,8 @@ public class SEEKConnector {
         File f = new File(file.getPath());
         String datasetCode = file.getDataSetPermId().toString();
         String assetName = datasetCode+": "+f.getName();
-        ISADataFile isaFile = new ISADataFile(assetName, file.getPath(),
-            Arrays.asList("1"));
+        GenericSeekAsset isaFile = new GenericSeekAsset("data_files", assetName, file.getPath(),
+            Arrays.asList("1"));//TODO
         isaFile.withAssays(assays);
         String fileExtension = f.getName().substring(f.getName().lastIndexOf(".")+1);
         String annotation = translator.dataFormatAnnotationForExtension(fileExtension);
@@ -241,7 +290,7 @@ public class SEEKConnector {
       return Optional.empty();
   }
 
-  public List<AssetToUpload> createAssets(List<DataSetFile> filesInDataset, String assetType,
+  public List<AssetToUpload> createAssets(List<DataSetFile> filesInDataset,
       List<String> assays)
       throws IOException, URISyntaxException, InterruptedException {
     List<AssetToUpload> result = new ArrayList<>();
@@ -249,8 +298,8 @@ public class SEEKConnector {
       if(!file.getPath().isBlank() && !file.isDirectory()) {
         File f = new File(file.getPath());
         String datasetCode = file.getDataSetPermId().toString();
-        String assetName = datasetCode+": "+f.getName();
-        ISADataFile isaFile = new ISADataFile(assetName, file.getPath(),
+        String assetName = datasetCode+": "+f.getName();//TODO?
+        GenericSeekAsset isaFile = new GenericSeekAsset("data_files", assetName, file.getPath(),
             Arrays.asList("1"));
         isaFile.withAssays(assays);
         String fileExtension = f.getName().substring(f.getName().lastIndexOf(".")+1);
@@ -260,6 +309,27 @@ public class SEEKConnector {
         }
         result.add(createDataFileAsset(datasetCode, isaFile));
       }
+    }
+    return result;
+  }
+
+  /**
+   * Creates
+   * @param isaToOpenBISFile
+   * @param assays
+   * @return
+   * @throws IOException
+   * @throws URISyntaxException
+   * @throws InterruptedException
+   */
+  public List<AssetToUpload> createAssetsForAssays(Map<GenericSeekAsset, DataSetFile> isaToOpenBISFile,
+      List<String> assays)
+      throws IOException, URISyntaxException, InterruptedException {
+    List<AssetToUpload> result = new ArrayList<>();
+    for (GenericSeekAsset isaFile : isaToOpenBISFile.keySet()) {
+      isaFile.withAssays(assays);
+      result.add(createDataFileAsset(isaToOpenBISFile.get(isaFile).getDataSetPermId().getPermId(),
+          isaFile));
     }
     return result;
   }
@@ -281,11 +351,42 @@ public class SEEKConnector {
     }
   }
 
+  public Map<String, String> getSampleTypeNamesToIDs()
+      throws URISyntaxException, IOException, InterruptedException {
+    String endpoint = apiURL+"/sample_types/";
+    HttpRequest request = HttpRequest.newBuilder()
+        .uri(new URI(endpoint))
+        .headers("Content-Type", "application/json")
+        .headers("Accept", "application/json")
+        .headers("Authorization", "Basic " + new String(credentials))
+        .GET().build();
+    HttpResponse<String> response = HttpClient.newBuilder().build()
+        .send(request, BodyHandlers.ofString());
+    if(response.statusCode() == 200) {
+      return parseSampleTypesJSON(response.body());
+    } else {
+      throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
+    }
+  }
+
+  private Map<String, String> parseSampleTypesJSON(String json) throws JsonProcessingException {
+    Map<String, String> typesToIDs = new HashMap<>();
+    JsonNode rootNode = new ObjectMapper().readTree(json);
+    JsonNode hits = rootNode.path("data");
+    for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
+      JsonNode hit = it.next();
+      String id = hit.get("id").asText();
+      String title = hit.get("attributes").get("title").asText();
+      typesToIDs.put(title, id);
+    }
+    return typesToIDs;
+  }
+
   private String searchNodeWithTitle(String nodeType, String title)
       throws URISyntaxException, IOException, InterruptedException {
     String endpoint = apiURL+"/search/";
     URIBuilder builder = new URIBuilder(endpoint);
-    builder.setParameter("q", title).setParameter("type", "nodeType");
+    builder.setParameter("q", title).setParameter("search_type", nodeType);
 
     HttpRequest request = HttpRequest.newBuilder()
         .uri(builder.build())
@@ -295,11 +396,13 @@ public class SEEKConnector {
         .GET().build();
     HttpResponse<String> response = HttpClient.newBuilder().build()
         .send(request, BodyHandlers.ofString());
+    System.err.println("searching for: "+title+" ("+nodeType+")");
     if(response.statusCode() == 200) {
       JsonNode rootNode = new ObjectMapper().readTree(response.body());
       JsonNode hits = rootNode.path("data");
       for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
         JsonNode hit = it.next();
+        System.err.println(hit.asText());
         if(hit.get("title").asText().equals(title)) {
           return hit.get("id").asText();
         }
@@ -348,26 +451,24 @@ public class SEEKConnector {
 
   public String updateNode(SeekStructure nodeWithChildren, String assayID, boolean transferData) {
     //updateAssay(nodeWithChildren.getAssay());
-    return assayID;
+    return apiURL+"/assays/"+assayID;
   }
 
-  public List<AssetToUpload> createNode(SeekStructure nodeWithChildren, boolean transferData)
+  public AssayWithQueuedAssets createNode(SeekStructure nodeWithChildren, boolean transferData)
       throws URISyntaxException, IOException, InterruptedException {
     String assayID = addAssay(nodeWithChildren.getAssay());
     for(ISASample sample : nodeWithChildren.getSamples()) {
       createSample(sample);
     }
 
-    List<AssetToUpload> assets = new ArrayList<>();
+    Map<GenericSeekAsset, DataSetFile> isaToFileMap = nodeWithChildren.getISAFileToDatasetFiles();
 
-    Map<ISADataFile, DataSetFile> isaToFileMap = nodeWithChildren.getIsaToOpenBISFiles();
-    for(ISADataFile isaFile : isaToFileMap.keySet()) {
-      String assetType = nodeWithChildren.getAssetType(isaFile);
-      createAssetForFile(isaToFileMap.get(isaFile), assetType, Arrays.asList(assayID))
-          .ifPresent(assets::add);
-    }
+    return new AssayWithQueuedAssets(apiURL+"/assays/"+assayID,
+        createAssetsForAssays(isaToFileMap, Arrays.asList(assayID)));
+  }
 
-    return assets;
+  public OpenbisSeekTranslator getTranslator() {
+    return translator;
   }
 
   public static class AssetToUpload {
