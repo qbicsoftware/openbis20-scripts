@@ -8,6 +8,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.StringJoiner;
 import java.util.TreeMap;
 import org.apache.logging.log4j.LogManager;
@@ -29,13 +31,13 @@ public class AuthenticationOptions {
 
   @Option(
       names = {"-as", "-as_url"},
-      description = "ApplicationServer URL",
+      description = "OpenBIS ApplicationServer URL",
       scope = CommandLine.ScopeType.INHERIT)
   private String as_url;
 
   @Option(
       names = {"-dss", "--dss_url"},
-      description = "DatastoreServer URL",
+      description = "OpenBIS DatastoreServer URL",
       scope = CommandLine.ScopeType.INHERIT)
   private String dss_url;
 
@@ -85,14 +87,14 @@ public class AuthenticationOptions {
     return seek_url;
   }
 
-  public String getDSS() {
+  public String getOpenbisDSS() {
     if(dss_url == null & configPath!=null && !configPath.isBlank()) {
       dss_url = ReadProperties.getProperties(configPath).get("dss");
     }
     return dss_url;
   }
 
-  public String getAS() {
+  public String getOpenbisAS() {
     if(as_url == null & configPath!=null && !configPath.isBlank()) {
       as_url = ReadProperties.getProperties(configPath).get("as");
     }
@@ -105,6 +107,16 @@ public class AuthenticationOptions {
 
   public char[] getOpenbisPassword() {
     return openbisPasswordOptions.getPassword();
+  }
+
+  public String getOpenbisBaseURL() throws MalformedURLException {
+    URL asURL = new URL(as_url);
+    String res = asURL.getProtocol()+ "://" +asURL.getHost();
+    if(asURL.getPort()!=-1) {
+      res+=":"+asURL.getPort();
+    }
+    System.err.println(res);
+    return res;
   }
 
   /**

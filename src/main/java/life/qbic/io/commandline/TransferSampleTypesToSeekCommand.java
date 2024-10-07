@@ -28,7 +28,7 @@ public class TransferSampleTypesToSeekCommand implements Runnable {
     System.out.println("auth...");
 
     OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(),
-        auth.getAS(), auth.getDSS());
+        auth.getOpenbisAS(), auth.getOpenbisDSS());
     System.out.println("openbis...");
 
     openbis = new OpenbisConnector(authentication);
@@ -36,8 +36,8 @@ public class TransferSampleTypesToSeekCommand implements Runnable {
     byte[] httpCredentials = Base64.encodeBase64(
         (auth.getSeekUser() + ":" + new String(auth.getSeekPassword())).getBytes());
     try {
-      seek = new SEEKConnector(auth.getSeekURL(), httpCredentials, "seek_test",
-          "lisym default study");
+      seek = new SEEKConnector(auth.getSeekURL(), httpCredentials, auth.getOpenbisBaseURL(),
+          "seek_test", "lisym default study");
       translator = seek.getTranslator();
     } catch (URISyntaxException | IOException | InterruptedException e) {
       throw new RuntimeException(e);

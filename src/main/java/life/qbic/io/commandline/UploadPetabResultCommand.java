@@ -33,7 +33,7 @@ public class UploadPetabResultCommand implements Runnable {
 
     @Override
     public void run() {
-      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getAS(), auth.getDSS());
+      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getOpenbisAS(), auth.getOpenbisDSS());
       openbis = new OpenbisConnector(authentication);
 
       if(!pathValid(dataPath)) {

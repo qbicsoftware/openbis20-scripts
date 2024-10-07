@@ -2,7 +2,6 @@ package life.qbic.model;
 
 import static java.util.Map.entry;
 
-import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.DataSet;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.property.DataType;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.property.PropertyAssignment;
@@ -16,13 +15,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import life.qbic.model.isa.GenericSeekAsset;
 import life.qbic.model.isa.ISAAssay;
-import life.qbic.model.isa.ISADataFile;
 import life.qbic.model.isa.ISASample;
 import life.qbic.model.isa.ISASampleType;
 import life.qbic.model.isa.ISASampleType.SampleAttribute;
@@ -34,10 +33,22 @@ public class OpenbisSeekTranslator {
   private final String DEFAULT_PROJECT_ID;
   private final String DEFAULT_STUDY_ID;
   private final String DEFAULT_TRANSFERRED_SAMPLE_TITLE = "openBIS Name";
+  private final String openBISBaseURL;
 
-  public OpenbisSeekTranslator(String defaultProjectID, String defaultStudyID) {
+  public OpenbisSeekTranslator(String openBISBaseURL, String defaultProjectID, String defaultStudyID) {
+    this.openBISBaseURL = openBISBaseURL;
     this.DEFAULT_PROJECT_ID = defaultProjectID;
     this.DEFAULT_STUDY_ID = defaultStudyID;
+  }
+
+  private String generateOpenBISLinkFromPermID(String entityType, String permID) {
+    StringBuilder builder = new StringBuilder();
+    builder.append(openBISBaseURL);
+    builder.append("#entity=");
+    builder.append(entityType);
+    builder.append("&permId=");
+    builder.append(permID);
+    return builder.toString();
   }
 
   Map<String, String> experimentTypeToAssayClass = Map.ofEntries(
@@ -63,8 +74,8 @@ public class OpenbisSeekTranslator {
           new SampleAttributeType("8", "String", "String")),
       entry(DataType.HYPERLINK, new SampleAttributeType("8", "String", "String")),
       entry(DataType.XML, new SampleAttributeType("7", "Text", "Text")),
-      entry(DataType.SAMPLE, //should be handled before mapping types
-          new SampleAttributeType("8", "String", "String")),
+      entry(DataType.SAMPLE, //we link the sample as URL to openBIS for now
+          new SampleAttributeType("5", "Web link", "String")),
       entry(DataType.DATE, new SampleAttributeType("2", "Date time", "Date"))
   );
 
@@ -150,12 +161,23 @@ public class OpenbisSeekTranslator {
 
       //try to put all attributes into sample properties, as they should be a 1:1 mapping
       Map<String, String> typeCodesToNames = new HashMap<>();
+      Set<String> propertiesLinkingSamples = new HashSet<>();
       for (PropertyAssignment a : sampleType.getPropertyAssignments()) {
-        typeCodesToNames.put(a.getPropertyType().getCode(), a.getPropertyType().getLabel());
+        String code = a.getPropertyType().getCode();
+        String label = a.getPropertyType().getLabel();
+        DataType type = a.getPropertyType().getDataType();
+        typeCodesToNames.put(code, label);
+        if(type.equals(DataType.SAMPLE)) {
+          propertiesLinkingSamples.add(code);
+        }
       }
       Map<String, Object> attributes = new HashMap<>();
       for(String code : sample.getProperties().keySet()) {
-        attributes.put(typeCodesToNames.get(code), sample.getProperties().get(code));
+        String value = sample.getProperty(code);
+        if(propertiesLinkingSamples.contains(code)) {
+          value = generateOpenBISLinkFromPermID("SAMPLE", value);
+        }
+        attributes.put(typeCodesToNames.get(code), value);
       }
 
       attributes.put(DEFAULT_TRANSFERRED_SAMPLE_TITLE, sample.getIdentifier().getIdentifier());

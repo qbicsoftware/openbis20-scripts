@@ -27,7 +27,7 @@ public class DownloadPetabCommand implements Runnable {
 
     @Override
     public void run() {
-      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getAS(), auth.getDSS());
+      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getOpenbisAS(), auth.getOpenbisDSS());
       OpenbisConnector openbis = new OpenbisConnector(authentication);
 
       List<DataSet> datasets = openbis.findDataSets(Collections.singletonList(datasetCode));

@@ -30,7 +30,6 @@ import life.qbic.model.isa.ISAAssay;
 import life.qbic.model.isa.ISASample;
 import life.qbic.model.isa.ISASampleType;
 import life.qbic.model.isa.ISAStudy;
-import org.apache.commons.codec.binary.Base64;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -41,13 +40,56 @@ public class SEEKConnector {
   private String apiURL;
   private byte[] credentials;
   private OpenbisSeekTranslator translator;
+  private final String DEFAULT_PROJECT_ID;
 
-  public SEEKConnector(String apiURL, byte[] httpCredentials, String defaultProjectTitle,
-      String defaultStudyTitle) throws URISyntaxException, IOException, InterruptedException {
+  public SEEKConnector(String apiURL, byte[] httpCredentials, String openBISBaseURL,
+      String defaultProjectTitle, String defaultStudyTitle) throws URISyntaxException, IOException,
+      InterruptedException {
     this.apiURL = apiURL;
     this.credentials = httpCredentials;
-    translator = new OpenbisSeekTranslator("1", //searchNodeWithTitle("projects", defaultProjectTitle),
-        "1");//searchNodeWithTitle("studies", defaultStudyTitle));
+    Optional<String> projectID = getProjectWithTitle(defaultProjectTitle);
+    if(projectID.isEmpty()) {
+      throw new RuntimeException("Failed to find project with title: " + defaultProjectTitle+". "
+          + "Please provide an existing default project.");
+    }
+    DEFAULT_PROJECT_ID = projectID.get();
+
+    translator = new OpenbisSeekTranslator(openBISBaseURL, DEFAULT_PROJECT_ID,
+        searchNodeWithTitle("studies", defaultStudyTitle));
+  }
+
+  /**
+   * Lists projects and returns the optional identifier of the one matching the provided ID.
+   * Necessary because project search does not seem to work.
+   * @param projectTitle the title to search for
+   * @return
+   */
+  private Optional<String> getProjectWithTitle(String projectTitle)
+      throws IOException, InterruptedException, URISyntaxException {
+    String endpoint = apiURL+"/projects/";
+    HttpRequest request = HttpRequest.newBuilder()
+        .uri(new URI(endpoint))
+        .headers("Content-Type", "application/json")
+        .headers("Accept", "application/json")
+        .headers("Authorization", "Basic " + new String(credentials))
+        .GET().build();
+    HttpResponse<String> response = HttpClient.newBuilder().build()
+        .send(request, BodyHandlers.ofString());
+    if(response.statusCode() == 200) {
+      JsonNode rootNode = new ObjectMapper().readTree(response.body());
+      JsonNode hits = rootNode.path("data");
+      for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
+        JsonNode hit = it.next();
+        String id = hit.get("id").asText();
+        String title = hit.get("attributes").get("title").asText();
+        if(title.equals(projectTitle)) {
+          return Optional.of(id);
+        }
+      }
+    } else {
+      throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
+    }
+    return Optional.empty();
   }
 
   public String addAssay(ISAAssay assay)
@@ -231,12 +273,15 @@ public class SEEKConnector {
     HttpRequest request = HttpRequest.newBuilder()
         .uri(new URI(blobEndpoint))
         .headers("Content-Type", "application/octet-stream")
-        .headers("Accept", "application/octet-stream")
+        .headers("Accept", "*/*")
         .headers("Authorization", "Basic " + new String(credentials))
         .PUT(BodyPublishers.ofInputStream(streamSupplier)).build();
 
     HttpResponse<String> response = HttpClient.newBuilder().build()
         .send(request, BodyHandlers.ofString());
+
+    System.err.println("response was: "+response);
+    System.err.println("response body: "+response.body());
 
     if(response.statusCode()!=200) {
       System.err.println(response.body());
@@ -276,9 +321,9 @@ public class SEEKConnector {
       if(!file.getPath().isBlank() && !file.isDirectory()) {
         File f = new File(file.getPath());
         String datasetCode = file.getDataSetPermId().toString();
-        String assetName = datasetCode+": "+f.getName();
-        GenericSeekAsset isaFile = new GenericSeekAsset("data_files", assetName, file.getPath(),
-            Arrays.asList("1"));//TODO
+        String assetName = datasetCode+": "+f.getName();//TODO what do we want to call the asset?
+        GenericSeekAsset isaFile = new GenericSeekAsset(assetType, assetName, file.getPath(),
+            Arrays.asList(DEFAULT_PROJECT_ID));
         isaFile.withAssays(assays);
         String fileExtension = f.getName().substring(f.getName().lastIndexOf(".")+1);
         String annotation = translator.dataFormatAnnotationForExtension(fileExtension);
@@ -298,9 +343,9 @@ public class SEEKConnector {
       if(!file.getPath().isBlank() && !file.isDirectory()) {
         File f = new File(file.getPath());
         String datasetCode = file.getDataSetPermId().toString();
-        String assetName = datasetCode+": "+f.getName();//TODO?
+        String assetName = datasetCode+": "+f.getName();//TODO what do we want to call the asset?
         GenericSeekAsset isaFile = new GenericSeekAsset("data_files", assetName, file.getPath(),
-            Arrays.asList("1"));
+            Arrays.asList(DEFAULT_PROJECT_ID));
         isaFile.withAssays(assays);
         String fileExtension = f.getName().substring(f.getName().lastIndexOf(".")+1);
         String annotation = translator.dataFormatAnnotationForExtension(fileExtension);
@@ -384,7 +429,7 @@ public class SEEKConnector {
 
   private String searchNodeWithTitle(String nodeType, String title)
       throws URISyntaxException, IOException, InterruptedException {
-    String endpoint = apiURL+"/search/";
+    String endpoint = apiURL+"/search";
     URIBuilder builder = new URIBuilder(endpoint);
     builder.setParameter("q", title).setParameter("search_type", nodeType);
 
@@ -402,8 +447,7 @@ public class SEEKConnector {
       JsonNode hits = rootNode.path("data");
       for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
         JsonNode hit = it.next();
-        System.err.println(hit.asText());
-        if(hit.get("title").asText().equals(title)) {
+        if(hit.get("attributes").get("title").asText().equals(title)) {
           return hit.get("id").asText();
         }
       }
@@ -458,6 +502,7 @@ public class SEEKConnector {
       throws URISyntaxException, IOException, InterruptedException {
     String assayID = addAssay(nodeWithChildren.getAssay());
     for(ISASample sample : nodeWithChildren.getSamples()) {
+      sample.setAssayIDs(Arrays.asList(assayID));
       createSample(sample);
     }
 
