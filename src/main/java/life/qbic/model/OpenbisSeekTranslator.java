@@ -66,7 +66,7 @@ public class OpenbisSeekTranslator {
     final String dataTypeToAttributeType = "openbis_datatype_to_seek_attributetype.xml";
     final String datasetToAssaytype = "dataset_type_to_assaytype.properties";
     final String experimentTypeToAssayClass = "experiment_type_to_assay_class.properties";
-    final String experimentTypeToAssayType = "more.properties";
+    final String experimentTypeToAssayType = "openbis_experiment_type_to_seek_assaytype.properties";
     this.experimentTypeToAssayType = PropertyReader.getProperties(experimentTypeToAssayType);
     this.datasetTypeToAssetType = PropertyReader.getProperties(datasetToAssaytype);
     this.experimentTypeToAssayClass = PropertyReader.getProperties(experimentTypeToAssayClass);
