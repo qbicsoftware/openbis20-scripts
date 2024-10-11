@@ -26,7 +26,7 @@ public class UploadPetabResultCommand implements Runnable {
   //    + " as parents for the upload. E.g. when this dataset has been generated using these datasets as input.", names = {"-pa", "--parents"})
   private List<String> parents = new ArrayList<>();
   @Mixin
-  AuthenticationOptions auth = new AuthenticationOptions();
+  OpenbisAuthenticationOptions auth = new OpenbisAuthenticationOptions();
 
   private OpenbisConnector openbis;
   private PetabParser petabParser = new PetabParser();
@@ -63,7 +63,6 @@ public class UploadPetabResultCommand implements Runnable {
         }
       }
       System.out.println("Uploading dataset...");
-      //TODO copy and remove source references here
       DataSetPermId result = openbis.registerDatasetForExperiment(Path.of(dataPath), experimentID, parents);
       System.out.printf("Dataset %s was successfully created%n", result.getPermId());
     }

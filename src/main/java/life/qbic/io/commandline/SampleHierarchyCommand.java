@@ -31,7 +31,7 @@ public class SampleHierarchyCommand implements Runnable {
   @Option(arity = "1", paramLabel = "<output file path>", description = "optional output path", names = {"-o", "--out"})
   private String outpath;
   @Mixin
-  AuthenticationOptions auth = new AuthenticationOptions();
+  OpenbisAuthenticationOptions auth = new OpenbisAuthenticationOptions();
 
     @Override
     public void run() {
@@ -43,7 +43,8 @@ public class SampleHierarchyCommand implements Runnable {
         } else {
           summary.add("Querying samples in all available spaces...");
         }
-        OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getOpenbisAS());
+        OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(),
+            auth.getOpenbisAS());
         OpenbisConnector openbis = new OpenbisConnector(authentication);
         Map<SampleTypeConnection, Integer> hierarchy = openbis.queryFullSampleHierarchy(spaces);
 

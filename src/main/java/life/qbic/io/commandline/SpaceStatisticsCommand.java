@@ -37,7 +37,7 @@ public class SpaceStatisticsCommand implements Runnable {
       names = {"--show-settings"})
   private boolean allSpaces;
   @Mixin
-  AuthenticationOptions auth = new AuthenticationOptions();
+  OpenbisAuthenticationOptions auth = new OpenbisAuthenticationOptions();
 
     @Override
     public void run() {

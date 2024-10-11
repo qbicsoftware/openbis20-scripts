@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Model class for Seek assets. Contains all mandatory and some optional properties and attributes
@@ -22,11 +23,18 @@ public class GenericSeekAsset extends AbstractISAObject {
   private Attributes attributes;
   private Relationships relationships;
   private String assetType;
+  private long fileSizeInBytes;
 
-  public GenericSeekAsset(String assetType, String title, String fileName, List<String> projectIds) {
+  public GenericSeekAsset(String assetType, String title, String fileName, List<String> projectIds,
+      long fileSizeInBytes) {
     this.assetType = assetType;
     this.attributes = new Attributes(title, fileName);
     this.relationships = new Relationships(projectIds);
+    this.fileSizeInBytes = fileSizeInBytes;
+  }
+
+  public long fileSizeInBytes() {
+    return fileSizeInBytes;
   }
 
   public GenericSeekAsset withOtherCreators(String otherCreators) {
@@ -64,6 +72,13 @@ public class GenericSeekAsset extends AbstractISAObject {
 
   public String getFileName() {
     return attributes.getContent_blobs().get(0).getOriginal_filename();
+  }
+
+  public void setDatasetLink(String dataSetLink, boolean transferDate) {
+    attributes.description = "This asset was imported from openBIS: "+dataSetLink;
+    if(!transferDate) {
+      attributes.setExternalLinkToData(dataSetLink);
+    }
   }
 
   private class Relationships {
@@ -125,14 +140,25 @@ public class GenericSeekAsset extends AbstractISAObject {
   private class Attributes {
 
     private String title;
+    private String description;
     private List<ContentBlob> contentBlobs = new ArrayList<>();
     private String otherCreators = "";
     private List<DataFormatAnnotation> dataFormatAnnotations = new ArrayList<>();
 
-
     public Attributes(String title, String fileName) {
       this.title = title;
-      this.contentBlobs.add(new ContentBlob(fileName));
+      ContentBlob blob = new ContentBlob(fileName);
+      this.contentBlobs.add(blob);
+    }
+
+    public void setExternalLinkToData(String dataSetLink) {
+      for(ContentBlob blob : contentBlobs) {
+        blob.setURL(dataSetLink);
+      }
+    }
+
+    public String getDescription() {
+      return description;
     }
 
     public String getTitle() {
@@ -178,6 +204,7 @@ public class GenericSeekAsset extends AbstractISAObject {
 
       private String originalFilename;
       private String contentType;
+      private String url;
 
       public ContentBlob(String fileName) {
         this.originalFilename = fileName;
@@ -193,7 +220,36 @@ public class GenericSeekAsset extends AbstractISAObject {
       public String getOriginal_filename() {
         return originalFilename;
       }
+
+      public void setURL(String dataSetLink) {
+        this.url = dataSetLink;
+      }
+
+      public String getUrl() {
+        return url;
+      }
     }
   }
 
+  @Override
+  public final boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof GenericSeekAsset)) {
+      return false;
+    }
+
+    GenericSeekAsset that = (GenericSeekAsset) o;
+    return Objects.equals(attributes, that.attributes) && Objects.equals(
+        relationships, that.relationships) && Objects.equals(assetType, that.assetType);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = Objects.hashCode(attributes);
+    result = 31 * result + Objects.hashCode(relationships);
+    result = 31 * result + Objects.hashCode(assetType);
+    return result;
+  }
 }

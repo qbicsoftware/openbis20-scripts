@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 
+/**
+ * Used to create the outer "data" node of all SEEK json objects.
+ */
 public abstract class AbstractISAObject {
 
   public String toJson(SimpleModule module) throws JsonProcessingException {
