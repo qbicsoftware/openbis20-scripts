@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Model class for ISA Samples. Contains all mandatory and some optional properties and attributes
@@ -23,6 +24,7 @@ public class ISASample extends AbstractISAObject {
   private Attributes attributes;
   private Relationships relationships;
   private final String ISA_TYPE = "samples";
+  private String id;
 
   public ISASample(String title, Map<String, Object> attributeMap, String sampleTypeId,
       List<String> projectIds) {
@@ -35,12 +37,20 @@ public class ISASample extends AbstractISAObject {
     return this;
   }
 
+  public void setSampleID(String seekID) {
+    this.id = seekID;
+  }
+
   public void setCreatorIDs(List<String> creatorIDs) {
     this.relationships.setCreatorIDs(creatorIDs);
   }
 
   public void setAssayIDs(List<String> assayIDs) {
     this.relationships.setAssayIDs(assayIDs);
+  }
+
+  public String getId() {
+    return id;
   }
 
   public String toJson() throws JsonProcessingException {
@@ -59,6 +69,10 @@ public class ISASample extends AbstractISAObject {
 
   public Attributes getAttributes() {
     return attributes;
+  }
+
+  public Map<String, Object> fetchCopyOfAttributeMap() {
+    return new HashMap<>(attributes.getAttribute_map());
   }
 
   private class Relationships {
@@ -165,4 +179,25 @@ public class ISASample extends AbstractISAObject {
     }
   }
 
+  @Override
+  public final boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof ISASample)) {
+      return false;
+    }
+
+    ISASample isaSample = (ISASample) o;
+    return Objects.equals(attributes, isaSample.attributes) && Objects.equals(
+        relationships, isaSample.relationships);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = Objects.hashCode(attributes);
+    result = 31 * result + Objects.hashCode(relationships);
+    result = 31 * result + ISA_TYPE.hashCode();
+    return result;
+  }
 }

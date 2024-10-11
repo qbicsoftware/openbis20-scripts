@@ -16,23 +16,33 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import javax.xml.parsers.ParserConfigurationException;
 import life.qbic.model.AssayWithQueuedAssets;
+import life.qbic.model.AssetInformation;
 import life.qbic.model.OpenbisSeekTranslator;
+import life.qbic.model.SampleInformation;
 import life.qbic.model.isa.SeekStructure;
 import life.qbic.model.isa.GenericSeekAsset;
 import life.qbic.model.isa.ISAAssay;
 import life.qbic.model.isa.ISASample;
 import life.qbic.model.isa.ISASampleType;
 import life.qbic.model.isa.ISAStudy;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.xml.sax.SAXException;
 
 public class SEEKConnector {
 
@@ -42,20 +52,29 @@ public class SEEKConnector {
   private OpenbisSeekTranslator translator;
   private final String DEFAULT_PROJECT_ID;
 
-  public SEEKConnector(String apiURL, byte[] httpCredentials, String openBISBaseURL,
-      String defaultProjectTitle, String defaultStudyTitle) throws URISyntaxException, IOException,
-      InterruptedException {
-    this.apiURL = apiURL;
+  public SEEKConnector(String seekURL, byte[] httpCredentials, String openBISBaseURL,
+      String defaultProjectTitle) throws URISyntaxException, IOException,
+      InterruptedException, ParserConfigurationException, SAXException {
+    this.apiURL = seekURL;
     this.credentials = httpCredentials;
     Optional<String> projectID = getProjectWithTitle(defaultProjectTitle);
-    if(projectID.isEmpty()) {
-      throw new RuntimeException("Failed to find project with title: " + defaultProjectTitle+". "
+    if (projectID.isEmpty()) {
+      throw new RuntimeException("Failed to find project with title: " + defaultProjectTitle + ". "
           + "Please provide an existing default project.");
     }
     DEFAULT_PROJECT_ID = projectID.get();
+    translator = new OpenbisSeekTranslator(openBISBaseURL, DEFAULT_PROJECT_ID);
+  }
 
-    translator = new OpenbisSeekTranslator(openBISBaseURL, DEFAULT_PROJECT_ID,
-        searchNodeWithTitle("studies", defaultStudyTitle));
+  public void setDefaultInvestigation(String investigationTitle)
+      throws URISyntaxException, IOException, InterruptedException {
+    translator.setDefaultInvestigation(searchNodeWithTitle("investigations",
+        investigationTitle));
+  }
+
+  public void setDefaultStudy(String studyTitle)
+      throws URISyntaxException, IOException, InterruptedException {
+    translator.setDefaultStudy(searchNodeWithTitle("studies", studyTitle));
   }
 
   /**
@@ -92,6 +111,23 @@ public class SEEKConnector {
     return Optional.empty();
   }
 
+  public String addStudy(ISAStudy assay)
+      throws URISyntaxException, IOException, InterruptedException {
+    String endpoint = apiURL+"/studies";
+
+    HttpResponse<String> response = HttpClient.newBuilder().build()
+        .send(buildAuthorizedPOSTRequest(endpoint, assay.toJson()),
+            BodyHandlers.ofString());
+
+    if(response.statusCode()!=200) {
+      throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
+    }
+    JsonNode rootNode = new ObjectMapper().readTree(response.body());
+    JsonNode idNode = rootNode.path("data").path("id");
+
+    return idNode.asText();
+  }
+
   public String addAssay(ISAAssay assay)
       throws URISyntaxException, IOException, InterruptedException {
     String endpoint = apiURL+"/assays";
@@ -124,6 +160,15 @@ public class SEEKConnector {
     JsonNode idNode = rootNode.path("data").path("id");
 
     return idNode.asText();
+  }
+
+  private HttpRequest buildAuthorizedPATCHRequest(String endpoint, String body) throws URISyntaxException {
+    return HttpRequest.newBuilder()
+        .uri(new URI(endpoint))
+        .headers("Content-Type", "application/json")
+        .headers("Accept", "application/json")
+        .headers("Authorization", "Basic " + new String(credentials))
+        .method("PATCH", HttpRequest.BodyPublishers.ofString(body)).build();
   }
 
   private HttpRequest buildAuthorizedPOSTRequest(String endpoint, String body) throws URISyntaxException {
@@ -160,13 +205,9 @@ public class SEEKConnector {
         .send(request, BodyHandlers.ofString());
     System.err.println(response.body());
   }
+
   /*
-  -datatype by extension
--assay equals experiment
--investigation: pre-created in SEEK?
--study: project
 -patient id should be linked somehow, maybe gender?
--flexible object type to sample type?
    */
 
   public void deleteSampleType(String id) throws URISyntaxException, IOException,
@@ -188,8 +229,8 @@ public class SEEKConnector {
     }
   }
 
-  public String createSampleType(ISASampleType sampleType) throws URISyntaxException, IOException,
-      InterruptedException {
+  public String createSampleType(ISASampleType sampleType)
+      throws URISyntaxException, IOException, InterruptedException {
     String endpoint = apiURL+"/sample_types";
 
     HttpResponse<String> response = HttpClient.newBuilder().build()
@@ -204,6 +245,25 @@ public class SEEKConnector {
     JsonNode idNode = rootNode.path("data").path("id");
 
     return idNode.asText();
+  }
+
+  public String updateSample(ISASample isaSample, String sampleID) throws URISyntaxException, IOException,
+      InterruptedException {
+    String endpoint = apiURL+"/samples/"+sampleID;
+    isaSample.setSampleID(sampleID);
+
+    HttpResponse<String> response = HttpClient.newBuilder().build()
+        .send(buildAuthorizedPATCHRequest(endpoint, isaSample.toJson()),
+            BodyHandlers.ofString());
+
+    if(response.statusCode()!=200) {
+      System.err.println(response.body());
+      throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
+    }
+    JsonNode rootNode = new ObjectMapper().readTree(response.body());
+    JsonNode idNode = rootNode.path("data").path("id");
+
+    return endpoint+"/"+idNode.asText();
   }
 
   public String createSample(ISASample isaSample) throws URISyntaxException, IOException,
@@ -221,10 +281,10 @@ public class SEEKConnector {
     JsonNode rootNode = new ObjectMapper().readTree(response.body());
     JsonNode idNode = rootNode.path("data").path("id");
 
-    return idNode.asText();
+    return endpoint+"/"+idNode.asText();
   }
 
-  private AssetToUpload createDataFileAsset(String datasetCode, GenericSeekAsset data)
+  private AssetToUpload createAsset(String datasetCode, GenericSeekAsset data)
       throws IOException, URISyntaxException, InterruptedException {
     String endpoint = apiURL+"/"+data.getType();
 
@@ -242,16 +302,14 @@ public class SEEKConnector {
         .path("attributes")
         .path("content_blobs")
         .path(0).path("link");
-    return new AssetToUpload(idNode.asText(), data.getFileName(), datasetCode);
+    return new AssetToUpload(idNode.asText(), data.getFileName(), datasetCode, data.fileSizeInBytes());
   }
 
-  @Deprecated
-  private void uploadFileContent(String assetType, String assetID, String blobID, String file)
+  public String uploadFileContent(String blobEndpoint, String file)
       throws URISyntaxException, IOException, InterruptedException {
-    String endpoint = apiURL+"/"+assetType+"/"+assetID+"/content_blobs/"+blobID;
 
     HttpRequest request = HttpRequest.newBuilder()
-        .uri(new URI(endpoint))
+        .uri(new URI(blobEndpoint))
         .headers("Content-Type", "application/octet-stream")
         .headers("Accept", "application/octet-stream")
         .headers("Authorization", "Basic " + new String(credentials))
@@ -264,6 +322,7 @@ public class SEEKConnector {
       System.err.println(response.body());
       throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
     }
+    return blobEndpointToAssetURL(blobEndpoint);
   }
 
   public String uploadStreamContent(String blobEndpoint,
@@ -287,9 +346,12 @@ public class SEEKConnector {
       System.err.println(response.body());
       throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
     } else {
-      String fileURL = blobEndpoint.split("content_blobs")[0];
-      return fileURL;
+      return blobEndpointToAssetURL(blobEndpoint);
     }
+  }
+
+  private String blobEndpointToAssetURL(String blobEndpoint) {
+    return blobEndpoint.split("content_blobs")[0];
   }
 
   public boolean endPointExists(String endpoint)
@@ -303,59 +365,6 @@ public class SEEKConnector {
     HttpResponse<String> response = HttpClient.newBuilder().build()
         .send(request, BodyHandlers.ofString());
     return response.statusCode() == 200;
-  }
-
-  /**
-   * Creates an optional asset for a file from an openBIS dataset. Folders are ignored.
-   * @param file
-   * @param assetType
-   * @param assays
-   * @return
-   * @throws IOException
-   * @throws URISyntaxException
-   * @throws InterruptedException
-   */
-  public Optional<AssetToUpload> createAssetForFile(DataSetFile file, String assetType,
-      List<String> assays)
-      throws IOException, URISyntaxException, InterruptedException {
-      if(!file.getPath().isBlank() && !file.isDirectory()) {
-        File f = new File(file.getPath());
-        String datasetCode = file.getDataSetPermId().toString();
-        String assetName = datasetCode+": "+f.getName();//TODO what do we want to call the asset?
-        GenericSeekAsset isaFile = new GenericSeekAsset(assetType, assetName, file.getPath(),
-            Arrays.asList(DEFAULT_PROJECT_ID));
-        isaFile.withAssays(assays);
-        String fileExtension = f.getName().substring(f.getName().lastIndexOf(".")+1);
-        String annotation = translator.dataFormatAnnotationForExtension(fileExtension);
-        if(annotation!=null) {
-          isaFile.withDataFormatAnnotations(Arrays.asList(annotation));
-        }
-        return Optional.of(createDataFileAsset(datasetCode, isaFile));
-      }
-      return Optional.empty();
-  }
-
-  public List<AssetToUpload> createAssets(List<DataSetFile> filesInDataset,
-      List<String> assays)
-      throws IOException, URISyntaxException, InterruptedException {
-    List<AssetToUpload> result = new ArrayList<>();
-    for(DataSetFile file : filesInDataset) {
-      if(!file.getPath().isBlank() && !file.isDirectory()) {
-        File f = new File(file.getPath());
-        String datasetCode = file.getDataSetPermId().toString();
-        String assetName = datasetCode+": "+f.getName();//TODO what do we want to call the asset?
-        GenericSeekAsset isaFile = new GenericSeekAsset("data_files", assetName, file.getPath(),
-            Arrays.asList(DEFAULT_PROJECT_ID));
-        isaFile.withAssays(assays);
-        String fileExtension = f.getName().substring(f.getName().lastIndexOf(".")+1);
-        String annotation = translator.dataFormatAnnotationForExtension(fileExtension);
-        if(annotation!=null) {
-          isaFile.withDataFormatAnnotations(Arrays.asList(annotation));
-        }
-        result.add(createDataFileAsset(datasetCode, isaFile));
-      }
-    }
-    return result;
   }
 
   /**
@@ -373,7 +382,7 @@ public class SEEKConnector {
     List<AssetToUpload> result = new ArrayList<>();
     for (GenericSeekAsset isaFile : isaToOpenBISFile.keySet()) {
       isaFile.withAssays(assays);
-      result.add(createDataFileAsset(isaToOpenBISFile.get(isaFile).getDataSetPermId().getPermId(),
+      result.add(createAsset(isaToOpenBISFile.get(isaFile).getDataSetPermId().getPermId(),
           isaFile));
     }
     return result;
@@ -427,11 +436,30 @@ public class SEEKConnector {
     return typesToIDs;
   }
 
-  private String searchNodeWithTitle(String nodeType, String title)
+  public boolean sampleTypeExists(String typeCode)
+      throws URISyntaxException, IOException, InterruptedException {
+    JsonNode result = genericSearch("sample_types", typeCode);
+    JsonNode hits = result.path("data");
+    for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
+      JsonNode hit = it.next();
+      if (hit.get("attributes").get("title").asText().equals(typeCode)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Performs a generic search and returns the response in JSON format
+   * @param nodeType the type of SEEK node to search for
+   * @param searchTerm the term to search for
+   * @return JsonNode of the server's response
+   */
+  private JsonNode genericSearch(String nodeType, String searchTerm)
       throws URISyntaxException, IOException, InterruptedException {
     String endpoint = apiURL+"/search";
     URIBuilder builder = new URIBuilder(endpoint);
-    builder.setParameter("q", title).setParameter("search_type", nodeType);
+    builder.setParameter("q", searchTerm).setParameter("search_type", nodeType);
 
     HttpRequest request = HttpRequest.newBuilder()
         .uri(builder.build())
@@ -441,20 +469,24 @@ public class SEEKConnector {
         .GET().build();
     HttpResponse<String> response = HttpClient.newBuilder().build()
         .send(request, BodyHandlers.ofString());
-    System.err.println("searching for: "+title+" ("+nodeType+")");
     if(response.statusCode() == 200) {
-      JsonNode rootNode = new ObjectMapper().readTree(response.body());
-      JsonNode hits = rootNode.path("data");
-      for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
-        JsonNode hit = it.next();
-        if(hit.get("attributes").get("title").asText().equals(title)) {
-          return hit.get("id").asText();
-        }
-      }
-      throw new RuntimeException("Matching "+nodeType+" title was not found : " + title);
+      return new ObjectMapper().readTree(response.body());
     } else {
       throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
     }
+  }
+
+  private String searchNodeWithTitle(String nodeType, String title)
+      throws URISyntaxException, IOException, InterruptedException {
+    JsonNode result = genericSearch(nodeType, title);
+    JsonNode hits = result.path("data");
+    for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
+      JsonNode hit = it.next();
+      if (hit.get("attributes").get("title").asText().equals(title)) {
+        return hit.get("id").asText();
+      }
+    }
+    throw new RuntimeException("Matching " + nodeType + " title was not found : " + title);
   }
 
   /**
@@ -467,9 +499,147 @@ public class SEEKConnector {
    */
   public List<String> searchAssaysContainingKeyword(String searchTerm)
       throws URISyntaxException, IOException, InterruptedException {
-    String endpoint = apiURL+"/search/";
+
+    JsonNode result = genericSearch("assays", "*"+searchTerm+"*");
+
+    JsonNode hits = result.path("data");
+    List<String> assayIDs = new ArrayList<>();
+    for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
+      JsonNode hit = it.next();
+      assayIDs.add(hit.get("id").asText());
+    }
+    return assayIDs;
+  }
+
+  /**
+   * Updates information of an existing assay, its samples and attached assets. Missing samples and
+   * assets are created, but nothing missing from the new structure is deleted from SEEK.
+   * @param nodeWithChildren the translated Seek structure as it should be once the update is done
+   * @param assayID the assay id of the existing assay, that should be compared to the new structure
+   * @return information necessary to make post registration updates in openBIS and upload missing
+   * data to newly created assets. In the case of the update use case, only newly created objects
+   * will be contained in the return object.
+   */
+  public SeekStructurePostRegistrationInformation updateNode(SeekStructure nodeWithChildren,
+      String assayID) throws URISyntaxException, IOException, InterruptedException {
+    JsonNode assayData = fetchAssayData(assayID).get("data");
+    Map<String, SampleInformation> sampleInfos = collectSampleInformation(assayData);
+
+    // compare samples
+    Map<ISASample, String> newSamplesWithReferences = nodeWithChildren.getSamplesWithOpenBISReference();
+
+    List<ISASample> samplesToCreate = new ArrayList<>();
+    for (ISASample newSample : newSamplesWithReferences.keySet()) {
+      String openBisID = newSamplesWithReferences.get(newSample);
+      SampleInformation existingSample = sampleInfos.get(openBisID);
+      if (existingSample == null) {
+        samplesToCreate.add(newSample);
+        System.out.printf("%s not found in SEEK. It will be created.%n", openBisID);
+      } else {
+        Map<String, Object> newAttributes = newSample.fetchCopyOfAttributeMap();
+        for (String key : newAttributes.keySet()) {
+          Object newValue = newAttributes.get(key);
+          Object oldValue = existingSample.getAttributes().get(key);
+
+          boolean oldEmpty = oldValue == null || oldValue.toString().isEmpty();
+          boolean newEmpty = newValue == null || newValue.toString().isEmpty();
+          if ((!oldEmpty && !newEmpty) && !newValue.equals(oldValue)) {
+            System.out.printf("Mismatch found in attributes of %s. Sample will be updated.%n",
+                openBisID);
+            newSample.setAssayIDs(List.of(assayID));
+            updateSample(newSample, existingSample.getSeekID());
+          }
+        }
+      }
+    }
+
+    // compare assets
+    Map<String, AssetInformation> assetInfos = collectAssetInformation(assayData);
+    Map<GenericSeekAsset, DataSetFile> newAssetsToFiles = nodeWithChildren.getISAFileToDatasetFiles();
+
+    List<GenericSeekAsset> assetsToCreate = new ArrayList<>();
+    for (GenericSeekAsset newAsset : newAssetsToFiles.keySet()) {
+      DataSetFile file = newAssetsToFiles.get(newAsset);
+      String newPermId = file.getDataSetPermId().getPermId();
+      if (!assetInfos.containsKey(newPermId)) {
+        assetsToCreate.add(newAsset);
+        System.out.printf("Assets with Dataset PermId %s not found in SEEK. File %s from this "
+            + "Dataset will be created.%n", newPermId, newAsset.getFileName());
+      }
+    }
+    Map<String, String> sampleIDsWithEndpoints = new HashMap<>();
+    for (ISASample sample : samplesToCreate) {
+      sample.setAssayIDs(Collections.singletonList(assayID));
+      String sampleEndpoint = createSample(sample);
+      sampleIDsWithEndpoints.put(newSamplesWithReferences.get(sample), sampleEndpoint);
+    }
+    List<AssetToUpload> assetsToUpload = new ArrayList<>();
+    for (GenericSeekAsset asset : assetsToCreate) {
+      asset.withAssays(Collections.singletonList(assayID));
+      assetsToUpload.add(createAsset(newAssetsToFiles.get(asset).getDataSetPermId().getPermId(),
+          asset));
+    }
+    Map<String, Set<String>> datasetIDsWithEndpoints = new HashMap<>();
+
+    for (AssetToUpload asset : assetsToUpload) {
+      String endpointWithoutBlob = blobEndpointToAssetURL(asset.getBlobEndpoint());
+      String dsCode = asset.getDataSetCode();
+      if (datasetIDsWithEndpoints.containsKey(dsCode)) {
+        datasetIDsWithEndpoints.get(dsCode).add(endpointWithoutBlob);
+      } else {
+        datasetIDsWithEndpoints.put(dsCode, new HashSet<>(
+            List.of(endpointWithoutBlob)));
+      }
+    }
+
+    String assayEndpoint = apiURL + "/assays/" + assayID;
+    AssayWithQueuedAssets assayWithQueuedAssets =
+        new AssayWithQueuedAssets(assayEndpoint, assetsToUpload);
+    String expID = nodeWithChildren.getAssayWithOpenBISReference().getRight();
+    Pair<String, String> experimentIDWithEndpoint = new ImmutablePair<>(expID, assayEndpoint);
+
+    return new SeekStructurePostRegistrationInformation(assayWithQueuedAssets,
+        experimentIDWithEndpoint, sampleIDsWithEndpoints, datasetIDsWithEndpoints);
+  }
+
+  private Map<String, AssetInformation> collectAssetInformation(JsonNode assayData)
+      throws URISyntaxException, IOException, InterruptedException {
+    List<String> assetTypes = new ArrayList<>(Arrays.asList("data_files", "models", "sops",
+        "documents", "publications"));
+    Map<String, AssetInformation> assets = new HashMap<>();
+    JsonNode relationships = assayData.get("relationships");
+    for(String type : assetTypes) {
+      for (Iterator<JsonNode> it = relationships.get(type).get("data").elements(); it.hasNext(); ) {
+          String assetID = it.next().get("id").asText();
+          AssetInformation assetInfo = fetchAssetInformation(assetID, type);
+          if(assetInfo.getOpenbisPermId()!=null) {
+            assets.put(assetInfo.getOpenbisPermId(), assetInfo);
+          } else {
+            System.out.printf("No Dataset permID found for existing %s %s (id: %s)%n"
+                    + "This asset will be treated as if it would not exist in the update.%n",
+                type, assetInfo.getTitle(), assetID);
+          }
+      }
+    }
+    return assets;
+  }
+
+  private Map<String, SampleInformation> collectSampleInformation(JsonNode assayData)
+      throws URISyntaxException, IOException, InterruptedException {
+    Map<String, SampleInformation> samples = new HashMap<>();
+    JsonNode relationships = assayData.get("relationships");
+      for (Iterator<JsonNode> it = relationships.get("samples").get("data").elements(); it.hasNext(); ) {
+        String sampleID = it.next().get("id").asText();
+        SampleInformation info = fetchSampleInformation(sampleID);
+        samples.put(info.getOpenBisIdentifier(), info);
+      }
+    return samples;
+  }
+
+  private AssetInformation fetchAssetInformation(String assetID, String assetType)
+      throws URISyntaxException, IOException, InterruptedException {
+    String endpoint = apiURL+"/"+assetType+"/"+assetID;
     URIBuilder builder = new URIBuilder(endpoint);
-    builder.setParameter("q", searchTerm).setParameter("type", "assays");
 
     HttpRequest request = HttpRequest.newBuilder()
         .uri(builder.build())
@@ -480,36 +650,113 @@ public class SEEKConnector {
     HttpResponse<String> response = HttpClient.newBuilder().build()
         .send(request, BodyHandlers.ofString());
     if(response.statusCode() == 200) {
-      JsonNode rootNode = new ObjectMapper().readTree(response.body());
-      JsonNode hits = rootNode.path("data");
-      List<String> assayIDs = new ArrayList<>();
-      for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
-        JsonNode hit = it.next();
-        assayIDs.add(hit.get("id").asText());
+      JsonNode attributes = new ObjectMapper().readTree(response.body()).get("data").get("attributes");
+      String title = attributes.get("title").asText();
+      String description = attributes.get("description").asText();
+      AssetInformation result = new AssetInformation(assetID, assetType, title, description);
+      Optional<String> permID = tryParseDatasetPermID(title);
+      if(permID.isPresent()) {
+        result.setOpenbisPermId(permID.get());
+      } else {
+        tryParseDatasetPermID(description).ifPresent(result::setOpenbisPermId);
       }
-      return assayIDs;
+      return result;
     } else {
       throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
     }
   }
 
-  public String updateNode(SeekStructure nodeWithChildren, String assayID, boolean transferData) {
-    //updateAssay(nodeWithChildren.getAssay());
-    return apiURL+"/assays/"+assayID;
+  private Optional<String> tryParseDatasetPermID(String input) {
+    Matcher titleMatcher = OpenbisConnector.datasetCodePattern.matcher(input);
+    if(titleMatcher.find()) {
+      return Optional.of(titleMatcher.group());
+    }
+    return Optional.empty();
   }
 
-  public AssayWithQueuedAssets createNode(SeekStructure nodeWithChildren, boolean transferData)
+  private SampleInformation fetchSampleInformation(String sampleID) throws URISyntaxException,
+      IOException, InterruptedException {
+    String endpoint = apiURL+"/samples/"+sampleID;
+    URIBuilder builder = new URIBuilder(endpoint);
+
+    HttpRequest request = HttpRequest.newBuilder()
+        .uri(builder.build())
+        .headers("Content-Type", "application/json")
+        .headers("Accept", "application/json")
+        .headers("Authorization", "Basic " + new String(credentials))
+        .GET().build();
+    HttpResponse<String> response = HttpClient.newBuilder().build()
+        .send(request, BodyHandlers.ofString());
+    if(response.statusCode() == 200) {
+      JsonNode attributeNode = new ObjectMapper().readTree(response.body()).get("data").get("attributes");
+      //title is openbis identifier - this is also added to attribute_map under the name:
+      //App.configProperties.get("seek_openbis_sample_title");
+      String openBisId = attributeNode.get("title").asText();
+      Map<String, Object> attributesMap = new ObjectMapper()
+          .convertValue(attributeNode.get("attribute_map"), Map.class);
+      return new SampleInformation(sampleID, openBisId, attributesMap);
+    } else {
+      throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
+    }
+  }
+
+  private JsonNode fetchAssayData(String assayID)
       throws URISyntaxException, IOException, InterruptedException {
-    String assayID = addAssay(nodeWithChildren.getAssay());
-    for(ISASample sample : nodeWithChildren.getSamples()) {
-      sample.setAssayIDs(Arrays.asList(assayID));
-      createSample(sample);
+    String endpoint = apiURL+"/assays/"+assayID;
+    URIBuilder builder = new URIBuilder(endpoint);
+
+    HttpRequest request = HttpRequest.newBuilder()
+        .uri(builder.build())
+        .headers("Content-Type", "application/json")
+        .headers("Accept", "application/json")
+        .headers("Authorization", "Basic " + new String(credentials))
+        .GET().build();
+    HttpResponse<String> response = HttpClient.newBuilder().build()
+        .send(request, BodyHandlers.ofString());
+    if(response.statusCode() == 200) {
+      return new ObjectMapper().readTree(response.body());
+    } else {
+      throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
+    }
+  }
+
+  public SeekStructurePostRegistrationInformation createNode(SeekStructure nodeWithChildren)
+      throws URISyntaxException, IOException, InterruptedException {
+
+    Pair<ISAAssay, String> assayIDPair = nodeWithChildren.getAssayWithOpenBISReference();
+
+    String assayID = addAssay(assayIDPair.getKey());
+    String assayEndpoint = apiURL+"/assays/"+assayID;
+    Pair<String, String> experimentIDWithEndpoint =
+        new ImmutablePair<>(assayIDPair.getValue(), assayEndpoint);
+
+    Map<String, String> sampleIDsWithEndpoints = new HashMap<>();
+    Map<ISASample, String> samplesWithReferences = nodeWithChildren.getSamplesWithOpenBISReference();
+    for(ISASample sample : samplesWithReferences.keySet()) {
+      sample.setAssayIDs(Collections.singletonList(assayID));
+      String sampleEndpoint = createSample(sample);
+      sampleIDsWithEndpoints.put(samplesWithReferences.get(sample), sampleEndpoint);
     }
 
     Map<GenericSeekAsset, DataSetFile> isaToFileMap = nodeWithChildren.getISAFileToDatasetFiles();
 
-    return new AssayWithQueuedAssets(apiURL+"/assays/"+assayID,
-        createAssetsForAssays(isaToFileMap, Arrays.asList(assayID)));
+    AssayWithQueuedAssets assayWithQueuedAssets = new AssayWithQueuedAssets(assayEndpoint,
+        createAssetsForAssays(isaToFileMap, Collections.singletonList(assayID)));
+
+    Map<String, Set<String>> datasetIDsWithEndpoints = new HashMap<>();
+
+    for(AssetToUpload asset : assayWithQueuedAssets.getAssets()) {
+      String endpointWithoutBlob = blobEndpointToAssetURL(asset.getBlobEndpoint());
+      String dsCode = asset.getDataSetCode();
+      if(datasetIDsWithEndpoints.containsKey(dsCode)) {
+        datasetIDsWithEndpoints.get(dsCode).add(endpointWithoutBlob);
+      } else {
+        datasetIDsWithEndpoints.put(dsCode, new HashSet<>(
+            List.of(endpointWithoutBlob)));
+      }
+    }
+    return new SeekStructurePostRegistrationInformation(assayWithQueuedAssets,
+        experimentIDWithEndpoint, sampleIDsWithEndpoints, datasetIDsWithEndpoints);
   }
 
   public OpenbisSeekTranslator getTranslator() {
@@ -521,11 +768,18 @@ public class SEEKConnector {
     private final String blobEndpoint;
     private final String filePath;
     private final String openBISDataSetCode;
+    private final long fileSizeInBytes;
 
-    public AssetToUpload(String blobEndpoint, String filePath, String openBISDataSetCode) {
+    public AssetToUpload(String blobEndpoint, String filePath, String openBISDataSetCode,
+        long fileSizeInBytes) {
       this.blobEndpoint = blobEndpoint;
       this.filePath = filePath;
       this.openBISDataSetCode = openBISDataSetCode;
+      this.fileSizeInBytes = fileSizeInBytes;
+    }
+
+    public long getFileSizeInBytes() {
+      return fileSizeInBytes;
     }
 
     public String getFilePath() {
@@ -539,5 +793,39 @@ public class SEEKConnector {
     public String getDataSetCode() {
       return openBISDataSetCode;
     }
+  }
+
+  public class SeekStructurePostRegistrationInformation {
+
+    private final AssayWithQueuedAssets assayWithQueuedAssets;
+    private final Pair<String, String> experimentIDWithEndpoint;
+    private final Map<String, String> sampleIDsWithEndpoints;
+    private final Map<String, Set<String>> datasetIDsWithEndpoints;
+
+    public SeekStructurePostRegistrationInformation(AssayWithQueuedAssets assayWithQueuedAssets,
+        Pair<String, String> experimentIDWithEndpoint, Map<String, String> sampleIDsWithEndpoints,
+        Map<String, Set<String>> datasetIDsWithEndpoints) {
+      this.assayWithQueuedAssets = assayWithQueuedAssets;
+      this.experimentIDWithEndpoint = experimentIDWithEndpoint;
+      this.sampleIDsWithEndpoints = sampleIDsWithEndpoints;
+      this.datasetIDsWithEndpoints = datasetIDsWithEndpoints;
+    }
+
+    public AssayWithQueuedAssets getAssayWithQueuedAssets() {
+      return assayWithQueuedAssets;
+    }
+
+    public Pair<String, String> getExperimentIDWithEndpoint() {
+      return experimentIDWithEndpoint;
+    }
+
+    public Map<String, String> getSampleIDsWithEndpoints() {
+      return sampleIDsWithEndpoints;
+    }
+
+    public Map<String, Set<String>> getDatasetIDsWithEndpoints() {
+      return datasetIDsWithEndpoints;
+    }
+
   }
 }

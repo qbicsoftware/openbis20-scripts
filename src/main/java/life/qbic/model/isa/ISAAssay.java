@@ -11,6 +11,7 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Model class for ISA Assays. Contains all mandatory and some optional properties and attributes
@@ -25,8 +26,10 @@ public class ISAAssay extends AbstractISAObject {
 
   private Attributes attributes;
   private Relationships relationships;
+  private String title;
 
   public ISAAssay(String title, String studyId, String assayClass, URI assayType) {
+    this.title = title;
     this.attributes = new Attributes(title, assayClass, assayType);
     this.relationships = new Relationships(studyId);
   }
@@ -175,7 +178,7 @@ public class ISAAssay extends AbstractISAObject {
     generator.writeEndObject();
   }
 
-  private class Attributes {
+  protected class Attributes {
 
     public List<String> tags = new ArrayList<>();
     public String description = "";
@@ -245,4 +248,27 @@ public class ISAAssay extends AbstractISAObject {
     }
   }
 
+  @Override
+  public final boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof ISAAssay)) {
+      return false;
+    }
+
+    ISAAssay isaAssay = (ISAAssay) o;
+    return Objects.equals(attributes,
+        isaAssay.attributes) && Objects.equals(relationships, isaAssay.relationships)
+        && Objects.equals(title, isaAssay.title);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = ISA_TYPE.hashCode();
+    result = 31 * result + Objects.hashCode(attributes);
+    result = 31 * result + Objects.hashCode(relationships);
+    result = 31 * result + Objects.hashCode(title);
+    return result;
+  }
 }

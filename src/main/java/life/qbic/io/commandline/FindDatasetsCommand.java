@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import life.qbic.App;
 import life.qbic.model.DatasetWithProperties;
@@ -28,7 +29,7 @@ public class FindDatasetsCommand implements Runnable {
   @Option(arity = "1", paramLabel = "<space>", description = "Optional openBIS spaces to filter samples", names = {"-s", "--space"})
   private String space;
   @Mixin
-  AuthenticationOptions auth = new AuthenticationOptions();
+  OpenbisAuthenticationOptions auth = new OpenbisAuthenticationOptions();
 
     @Override
     public void run() {
@@ -39,7 +40,8 @@ public class FindDatasetsCommand implements Runnable {
       } else {
         System.out.println("Querying experiment in all available spaces...");
       }
-      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getOpenbisAS());
+      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(),
+          auth.getOpenbisAS());
       OpenbisConnector openbis = new OpenbisConnector(authentication);
       List<DataSet> datasets = openbis.listDatasetsOfExperiment(spaces, experimentCode).stream()
           .sorted(Comparator.comparing(
@@ -47,9 +49,11 @@ public class FindDatasetsCommand implements Runnable {
               Collectors.toList());
       Map<String, String> properties = new HashMap<>();
       if (!datasets.isEmpty()) {
-        Optional<String> patientID = openbis.findPropertyInSampleHierarchy("PATIENT_DKFZ_ID",
+        Set<String> patientIDs = openbis.findPropertiesInSampleHierarchy("PATIENT_DKFZ_ID",
             datasets.get(0).getExperiment().getIdentifier());
-        patientID.ifPresent(s -> properties.put("Patient ID", s));
+        if(!patientIDs.isEmpty()) {
+          properties.put("patientIDs", String.join(",", patientIDs));
+        }
       }
       List<DatasetWithProperties> datasetWithProperties = datasets.stream().map(dataSet -> {
         DatasetWithProperties ds = new DatasetWithProperties(dataSet);

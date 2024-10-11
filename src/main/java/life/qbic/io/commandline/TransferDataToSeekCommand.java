@@ -1,9 +1,7 @@
 package life.qbic.io.commandline;
 
 import ch.ethz.sis.openbis.generic.OpenBIS;
-import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.DataSet;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
-import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.DataSetFile;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -17,15 +15,18 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.xml.parsers.ParserConfigurationException;
 import life.qbic.App;
 import life.qbic.model.AssayWithQueuedAssets;
 import life.qbic.model.OpenbisExperimentWithDescendants;
 import life.qbic.model.OpenbisSeekTranslator;
+import life.qbic.model.download.SEEKConnector.SeekStructurePostRegistrationInformation;
 import life.qbic.model.isa.SeekStructure;
 import life.qbic.model.download.OpenbisConnector;
 import life.qbic.model.download.SEEKConnector;
 import life.qbic.model.download.SEEKConnector.AssetToUpload;
 import org.apache.commons.codec.binary.Base64;
+import org.xml.sax.SAXException;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
@@ -36,7 +37,7 @@ import picocli.CommandLine.Parameters;
         "Transfers metadata and (optionally) data from openBIS to SEEK. Experiments, samples and "
             + "dataset information are always transferred together (as assays, samples and one of "
             + "several data types in SEEK). Dataset info always links back to the openBIS path of "
-            + "the respective dataset. The data itself will can transferred and stored in SEEK "
+            + "the respective dataset. The data itself can be transferred and stored in SEEK "
             + "using the '-d' flag."
             + "To completely exclude some dataset information from being transferred, a "
             + "file ('--blacklist') containing dataset codes (from openBIS) can be specified."
@@ -47,6 +48,12 @@ public class TransferDataToSeekCommand implements Runnable {
   @Parameters(arity = "1", paramLabel = "openbis id", description = "The identifier of the "
       + "experiment, sample or dataset to transfer.")
   private String objectID;
+  @Parameters(arity = "1", paramLabel = "seek study", description = "Title of the study in SEEK"
+      + "where nodes should be added.")
+  private String studyTitle;
+  @Option(names = "--seek-project", description = "Title of the project in SEEK where nodes should"
+      + "be added. Can alternatively be provided via the config file as 'seek_default_project'.")
+  private String projectTitle;
   @Option(names = "--blacklist", description = "Path to file specifying by dataset "
       + "dataset code which openBIS datasets not to transfer to SEEK. The file must contain one code "
       + "per line.")
@@ -55,28 +62,42 @@ public class TransferDataToSeekCommand implements Runnable {
       + "information in SEEK for the specified openBIS input should not be updated, but new nodes "
       + "created.")
   private boolean noUpdate;
-  /*@Option(names = {"-sn", "--seek-node"}, paramLabel = "seek node", description =
-      "The target node in SEEK to transfer to. Must correspond to "
-          + "the type of oopenBIS identifier chosen: experiment - assay; sample - sample; dataset - any of the data types. If no node is specified, "
-          + "a new data structure will be created in SEEK, starting from the related experiment.")
-  private String seekNode;
-   */
   @Option(names = {"-d", "--data"}, description =
       "Transfers the data itself to SEEK along with the metadata. "
           + "Otherwise only the link(s) to the openBIS object will be created in SEEK.")
   private boolean transferData;
   @Mixin
-  AuthenticationOptions auth = new AuthenticationOptions();
+  SeekAuthenticationOptions seekAuth = new SeekAuthenticationOptions();
+  @Mixin
+  OpenbisAuthenticationOptions openbisAuth = new OpenbisAuthenticationOptions();
   OpenbisConnector openbis;
   SEEKConnector seek;
   OpenbisSeekTranslator translator;
+  //500 MB - user will be informed that the transfer will take a while, for each file larger than this
+  private final long FILE_WARNING_SIZE = 500*1024*1024;
 
   @Override
   public void run() {
+    App.readConfig();
+    System.out.printf("Transfer openBIS -> SEEK started.%n");
+    System.out.printf("Provided openBIS object: %s%n", objectID);
+    System.out.printf("Provided SEEK study title: %s%n", studyTitle);
+    if(projectTitle!=null && !projectTitle.isBlank()) {
+      System.out.printf("Provided SEEK project title: %s%n", projectTitle);
+    } else {
+      System.out.printf("No SEEK project title provided, will search config file.%n");
+    }
+    System.out.printf("Provided SEEK study title: %s%n", studyTitle);
+    System.out.printf("Transfer datasets to SEEK? %s%n", transferData);
+    System.out.printf("Update existing assay if found? %s%n", !noUpdate);
+    if(blacklistFile!=null && !blacklistFile.isBlank()) {
+      System.out.printf("File with datasets codes that won't be transferred: %s%n", blacklistFile);
+    }
+
     System.out.println("Connecting to openBIS...");
 
-    OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(),
-        auth.getOpenbisAS(), auth.getOpenbisDSS());
+    OpenBIS authentication = App.loginToOpenBIS(openbisAuth.getOpenbisPassword(),
+        openbisAuth.getOpenbisUser(), openbisAuth.getOpenbisAS(), openbisAuth.getOpenbisDSS());
 
     openbis = new OpenbisConnector(authentication);
 
@@ -104,35 +125,22 @@ public class TransferDataToSeekCommand implements Runnable {
     System.out.println("Connecting to SEEK...");
 
     byte[] httpCredentials = Base64.encodeBase64(
-        (auth.getSeekUser() + ":" + new String(auth.getSeekPassword())).getBytes());
+        (seekAuth.getSeekUser() + ":" + new String(seekAuth.getSeekPassword())).getBytes());
     try {
-      seek = new SEEKConnector(auth.getSeekURL(), httpCredentials, auth.getOpenbisBaseURL(),
-          "seek_test", "lisym default study");
+      String project = App.configProperties.get("seek_default_project");
+      if(project == null || project.isBlank()) {
+        throw new RuntimeException("a default project must be provided via config "+
+        "('seek_default_project') or parameter.");
+      }
+      seek = new SEEKConnector(seekAuth.getSeekURL(), httpCredentials,
+          openbisAuth.getOpenbisBaseURL(), App.configProperties.get("seek_default_project"));
+      seek.setDefaultStudy(studyTitle);
       translator = seek.getTranslator();
-    } catch (URISyntaxException | IOException | InterruptedException e) {
+    } catch (URISyntaxException | IOException | InterruptedException |
+             ParserConfigurationException | SAXException e) {
       throw new RuntimeException(e);
     }
 
-    /*
-    if (seekNode != null) {
-      try {
-        if (!seek.endPointExists(seekNode)) {
-          System.out.println(seekNode + " could not be found");
-          return;
-        } else {
-          if (isExperiment) {
-            Experiment experimentWithSamplesAndDatasets = openbis.getExperimentWithDescendants(
-                objectID);
-            //SeekStructure seekStructure = translator.translate(seekNode, experimentWithSamplesAndDatasets);
-            //seek.fillAssayWithSamplesAndDatasets(seekNode, seekStructure);
-          }
-        }
-      } catch (URISyntaxException | InterruptedException | IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
-
-     */
     try {
       System.out.println("Collecting information from openBIS...");
       OpenbisExperimentWithDescendants experiment = openbis.getExperimentWithDescendants(objectID);
@@ -143,43 +151,24 @@ public class TransferDataToSeekCommand implements Runnable {
       System.out.println("Translating openBIS property codes to SEEK names...");
       Map<String, String> sampleTypesToIds = seek.getSampleTypeNamesToIDs();
       System.out.println("Creating SEEK structure...");
-      SeekStructure nodeWithChildren = translator.translate(experiment, sampleTypesToIds, blacklist);
-      if(assayID.isEmpty()) {
-        System.out.println("Creating new nodes...");
-        createNewNodes(nodeWithChildren);
+      SeekStructure nodeWithChildren = translator.translate(experiment, sampleTypesToIds, blacklist,
+          transferData);
+
+      if(assayID.isEmpty() || noUpdate) {
+        System.out.println("Creating new node(s)...");
+        SeekStructurePostRegistrationInformation postRegInfo = createNewNodes(nodeWithChildren);
+        System.out.println("Creating links to SEEK objects in openBIS...");
+        openbis.createSeekLinks(postRegInfo);
       } else {
         System.out.println("Updating nodes...");
-        updateNodes(nodeWithChildren, assayID.get());
+        SeekStructurePostRegistrationInformation postRegInfo = updateNodes(nodeWithChildren,
+            assayID.get());
+        System.out.println("Updating links to SEEK objects in openBIS...");
+        openbis.updateSeekLinks(postRegInfo);
       }
     } catch (URISyntaxException | InterruptedException | IOException e) {
       throw new RuntimeException(e);
     }
-
-      /*
-
-      List<DataSet> datasets = openbis.findDataSets(Collections.singletonList(datasetCode));
-
-      if(datasets.isEmpty()) {
-        System.out.println(datasetCode+" not found");
-        return;
-      }
-
-      DatasetWithProperties result = new DatasetWithProperties(datasets.get(0));
-      Optional<String> patientID = openbis.findPropertyInSampleHierarchy("PATIENT_DKFZ_ID",
-          result.getExperiment().getIdentifier());
-      patientID.ifPresent(s -> result.addProperty("patientID", s));
-
-      System.out.println("Found dataset, downloading.");
-      System.out.println();
-
-      final String tmpPath = "tmp/";
-
-      File downloadFolder = openbis.downloadDataset(tmpPath, datasetCode);
-
-
-
-      cleanupTemp(new File(tmpPath));
-*/
     System.out.println("Done");
   }
 
@@ -206,23 +195,50 @@ public class TransferDataToSeekCommand implements Runnable {
     }
   }
 
-  private void updateNodes(SeekStructure nodeWithChildren, String assayID) {
-    String updatedEndpoint = seek.updateNode(nodeWithChildren, assayID, transferData);
-    System.out.printf("%s was successfully updated.%n", updatedEndpoint);
+  private SeekStructurePostRegistrationInformation updateNodes(SeekStructure nodeWithChildren,
+      String assayID) throws URISyntaxException, IOException, InterruptedException {
+    SeekStructurePostRegistrationInformation postRegInfo = seek.updateNode(nodeWithChildren, assayID);
+    System.out.printf("%s was successfully updated.%n", postRegInfo.getExperimentIDWithEndpoint().getRight());
+    return postRegInfo;
   }
 
-  private void createNewNodes(SeekStructure nodeWithChildren)
+  private SeekStructurePostRegistrationInformation createNewNodes(SeekStructure nodeWithChildren)
       throws URISyntaxException, IOException, InterruptedException {
-    AssayWithQueuedAssets assetsOfAssayToUpload = seek.createNode(nodeWithChildren, transferData);
+    SeekStructurePostRegistrationInformation postRegistrationInformation =
+        seek.createNode(nodeWithChildren);
+    AssayWithQueuedAssets assetsOfAssayToUpload = postRegistrationInformation.getAssayWithQueuedAssets();
     if(transferData) {
+      final String tmpFolderPath = "tmp/";
       for(AssetToUpload asset : assetsOfAssayToUpload.getAssets()) {
-        System.out.printf("Streaming file %s from openBIS to SEEK...%n", asset.getFilePath());
-        String fileURL = seek.uploadStreamContent(asset.getBlobEndpoint(),
-            () -> openbis.streamDataset(asset.getDataSetCode(), asset.getFilePath()));
-        System.out.printf("File stored here: %s%n", fileURL);
+        String filePath = asset.getFilePath();
+        String dsCode = asset.getDataSetCode();
+        if(asset.getFileSizeInBytes() > 1000*1024*1024) {
+          System.out.printf("Skipping %s due to size...%n",
+              filePath);
+        } else if (asset.getFileSizeInBytes() > 300 * 1024 * 1024) {
+          System.out.printf("File is %s MB...streaming might take a while%n",
+              asset.getFileSizeInBytes() / (1024 * 1024));
+          System.out.printf("Downloading file %s from openBIS to tmp folder due to size...%n",
+              filePath);
+          File tmpFile = openbis.downloadDataset(tmpFolderPath, dsCode, filePath);
+
+          System.out.printf("Uploading file to SEEK...%n");
+          String fileURL = seek.uploadFileContent(asset.getBlobEndpoint(), tmpFile.getAbsolutePath());
+          System.out.printf("File stored here: %s%n", fileURL);
+        } else {
+          System.out.printf("Streaming file %s from openBIS to SEEK...%n", asset.getFilePath());
+
+          String fileURL = seek.uploadStreamContent(asset.getBlobEndpoint(),
+              () -> openbis.streamDataset(asset.getDataSetCode(), asset.getFilePath()));
+          System.out.printf("File stored here: %s%n", fileURL);
+        }
       }
+      System.out.printf("Cleaning up temp folder%n");
+      cleanupTemp(new File(tmpFolderPath));
     }
+
     System.out.printf("%s was successfully created.%n", assetsOfAssayToUpload.getAssayEndpoint());
+    return postRegistrationInformation;
   }
 
   private boolean sampleExists(String objectID) {
@@ -246,32 +262,13 @@ public class TransferDataToSeekCommand implements Runnable {
     String permID = experiment.getPermId().getPermId();
     List<String> assayIDs = seek.searchAssaysContainingKeyword(permID);
     if(assayIDs.isEmpty()) {
+      System.err.println("no assay found containing "+permID);
       return Optional.empty();
     }
     if(assayIDs.size() == 1) {
       return Optional.of(assayIDs.get(0));
     }
     throw new RuntimeException("Experiment identifier "+permID+ " was found in more than one assay: "+assayIDs);
-  }
-
-  private void sendDatasetToSeek(String datasetCode, String assayID)
-      throws URISyntaxException, IOException, InterruptedException {
-    assayID = "3";
-    System.out.println("Searching dataset in openBIS...");
-    List<DataSet> datasets = openbis.findDataSets(
-        Arrays.asList(datasetCode));
-    if(datasets.isEmpty()) {
-      return;
-    }
-    DataSet dataset = datasets.get(0);
-    List<DataSetFile> files = openbis.getDatasetFiles(dataset);
-    List<AssetToUpload> assets = seek.createAssets(files, Arrays.asList(assayID));
-    for(AssetToUpload asset : assets) {
-      System.out.printf("Streaming file %s from openBIS to SEEK...%n", asset.getFilePath());
-      String fileURL = seek.uploadStreamContent(asset.getBlobEndpoint(),
-          () -> openbis.streamDataset(datasetCode, asset.getFilePath()));
-      System.out.printf("File stored here: %s%n", fileURL);
-    }
   }
 
   private void cleanupTemp(File tmpFolder) {

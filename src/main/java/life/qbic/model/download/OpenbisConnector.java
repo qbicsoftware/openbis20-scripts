@@ -6,21 +6,22 @@ import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.DataSet;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.fetchoptions.DataSetFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.id.DataSetPermId;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.search.DataSetSearchCriteria;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.update.DataSetUpdate;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.entitytype.EntityKind;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.entitytype.id.EntityTypePermId;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.fetchoptions.ExperimentFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.id.ExperimentIdentifier;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.search.ExperimentSearchCriteria;
-import ch.ethz.sis.openbis.generic.asapi.v3.dto.property.PropertyAssignment;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.update.ExperimentUpdate;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.SampleType;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.fetchoptions.SampleFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.fetchoptions.SampleTypeFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.id.SampleIdentifier;
-import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.id.SamplePermId;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.search.SampleSearchCriteria;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.search.SampleTypeSearchCriteria;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.update.SampleUpdate;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.Space;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.fetchoptions.SpaceFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.space.search.SpaceSearchCriteria;
@@ -46,13 +47,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import life.qbic.App;
 import life.qbic.model.DatasetWithProperties;
 import life.qbic.model.OpenbisExperimentWithDescendants;
 import life.qbic.model.SampleTypeConnection;
 import life.qbic.model.SampleTypesAndMaterials;
+import life.qbic.model.download.SEEKConnector.SeekStructurePostRegistrationInformation;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -61,9 +64,10 @@ public class OpenbisConnector {
   private static final Logger LOG = LogManager.getLogger(OpenbisConnector.class);
   private final OpenBIS openBIS;
 
-  //public final static Pattern experimentIdPattern = Pattern.compile("\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+");
-  //public final static Pattern sampleIdPattern = Pattern.compile("\\/[A-Za-z0-9]+\\/[A-Za-z0-9]+");
-  public static Pattern datasetCodePattern = Pattern.compile("[0-9]^{17}-[0-9]+");
+  public static Pattern datasetCodePattern = Pattern.compile("[0-9]{17}-[0-9]+");
+  public final String EXPERIMENT_LINK_PROPERTY = "EXPERIMENT_NAME";
+  public final String SAMPLE_LINK_PROPERTY = "experimentLink";
+  public final String DATASET_LINK_PROPERTY = "experimentLink";
 
   public OpenbisConnector(OpenBIS authentication) {
     this.openBIS = authentication;
@@ -139,10 +143,10 @@ public class OpenbisConnector {
     return openBIS.searchDataSets(criteria, options).getObjects();
   }
 
-  public File downloadDataset(String targetPath, String datasetID) {
+  public File downloadDataset(String targetPath, String datasetID, String filePath) {
     DataSetFileDownloadOptions options = new DataSetFileDownloadOptions();
     IDataSetFileId fileToDownload = new DataSetFilePermId(new DataSetPermId(datasetID),
-        "");
+        filePath);
 
     // Setting recursive flag to true will return both subfolders and files
     options.setRecursive(true);
@@ -171,7 +175,7 @@ public class OpenbisConnector {
         }
       }
     }
-    return new File(targetPath);
+    return new File(targetPath, filePath.replace("original/",""));
   }
 
   public InputStream streamDataset(String datasetCode, String filePath) {
@@ -232,20 +236,22 @@ public class OpenbisConnector {
     return hierarchy;
   }
 
-  private Optional<String> getPropertyFromSampleHierarchy(String propertyName, List<Sample> samples) {
+  private Set<String> getPropertiesFromSampleHierarchy(String propertyName, List<Sample> samples,
+      Set<String> foundProperties) {
     for(Sample s : samples) {
       if(s.getProperties().containsKey(propertyName)) {
-        return Optional.of(s.getProperties().get(propertyName));
+        foundProperties.add(s.getProperties().get(propertyName));
+        return foundProperties;
       }
-      return getPropertyFromSampleHierarchy(propertyName, s.getParents());
+      return getPropertiesFromSampleHierarchy(propertyName, s.getParents(), foundProperties);
     }
-    return Optional.empty();
+    return foundProperties;
   }
 
-  public Optional<String> findPropertyInSampleHierarchy(String propertyName,
+  public Set<String> findPropertiesInSampleHierarchy(String propertyName,
       ExperimentIdentifier experimentId) {
-    return getPropertyFromSampleHierarchy(propertyName,
-        getSamplesWithAncestorsOfExperiment(experimentId));
+    return getPropertiesFromSampleHierarchy(propertyName,
+        getSamplesWithAncestorsOfExperiment(experimentId), new HashSet<>());
   }
 
   public Map<String, List<Experiment>> getExperimentsBySpace(List<String> spaces) {
@@ -377,18 +383,22 @@ public class OpenbisConnector {
   }
 
   private List<Sample> getSamplesWithAncestorsOfExperiment(ExperimentIdentifier experimentId) {
-    SampleFetchOptions allProps = new SampleFetchOptions();
-    allProps.withType();
-    allProps.withProperties();
-    SampleFetchOptions withAncestors = new SampleFetchOptions();
-    withAncestors.withParentsUsing(allProps);
-    withAncestors.withProperties();
-    withAncestors.withType();
+    int numberOfFetchedLevels = 10;
+    SampleFetchOptions previousLevel = null;
+    for(int i = 0; i < numberOfFetchedLevels; i++) {
+      SampleFetchOptions withAncestors = new SampleFetchOptions();
+      withAncestors.withProperties();
+      withAncestors.withType();
+      if (previousLevel != null) {
+        withAncestors.withParentsUsing(previousLevel);
+      }
+      previousLevel = withAncestors;
+    }
 
     SampleSearchCriteria criteria = new SampleSearchCriteria();
     criteria.withExperiment().withId().thatEquals(experimentId);
 
-    return openBIS.searchSamples(criteria, withAncestors).getObjects();
+    return openBIS.searchSamples(criteria, previousLevel).getObjects();
   }
 
   public List<DataSet> findDataSets(List<String> codes) {
@@ -491,4 +501,86 @@ public class OpenbisConnector {
     }
     return new SampleTypesAndMaterials(sampleTypes, sampleTypesAsMaterials);
   }
+
+  public void createSeekLinks(SeekStructurePostRegistrationInformation postRegistrationInformation) {
+    Pair<String, String> experimentInfo = postRegistrationInformation.getExperimentIDWithEndpoint();
+    ExperimentIdentifier id = new ExperimentIdentifier(experimentInfo.getLeft());
+    String endpoint = experimentInfo.getRight();
+    Map<String, String> props = new HashMap<>();
+    props.put(EXPERIMENT_LINK_PROPERTY, endpoint);
+    updateExperimentProperties(id, props, false);
+  }
+
+  public void updateSeekLinks(SeekStructurePostRegistrationInformation postRegistrationInformation) {
+  }
+
+  private void updateExperimentProperties(ExperimentIdentifier id, Map<String, String> properties,
+      boolean overwrite) {
+    ExperimentUpdate update = new ExperimentUpdate();
+    update.setExperimentId(id);
+    if(overwrite) {
+      update.setProperties(properties);
+    } else {
+      ExperimentFetchOptions options = new ExperimentFetchOptions();
+      options.withProperties();
+      Experiment oldExp = openBIS.getExperiments(Arrays.asList(id), options).get(id);
+      for(String property : properties.keySet()) {
+        String newValue = properties.get(property);
+        String oldValue = oldExp.getProperty(property);
+        if(oldValue == null || oldValue.isEmpty() || oldValue.equals(newValue)) {
+          update.setProperty(property, newValue);
+        } else if(!newValue.isBlank()) {
+          update.setProperty(property, oldValue+", "+newValue);//TODO this can be changed to any other strategy
+        }
+      }
+    }
+    openBIS.updateExperiments(Arrays.asList(update));
+  }
+
+  private void updateSampleProperties(SampleIdentifier id, Map<String, String> properties,
+      boolean overwrite) {
+    SampleUpdate update = new SampleUpdate();
+    update.setSampleId(id);
+    if(overwrite) {
+      update.setProperties(properties);
+    } else {
+      SampleFetchOptions options = new SampleFetchOptions();
+      options.withProperties();
+      Sample oldSample = openBIS.getSamples(Arrays.asList(id), options).get(id);
+      for(String property : properties.keySet()) {
+        String newValue = properties.get(property);
+        String oldValue = oldSample.getProperty(property);
+        if(oldValue == null || oldValue.isEmpty() || oldValue.equals(newValue)) {
+          update.setProperty(property, newValue);
+        } else {
+          update.setProperty(property, oldValue+", "+newValue);//TODO this can be changed to any other strategy
+        }
+      }
+    }
+    openBIS.updateSamples(Arrays.asList(update));
+  }
+
+  private void updateDatasetProperties(DataSetPermId id, Map<String, String> properties,
+      boolean overwrite) {
+    DataSetUpdate update = new DataSetUpdate();
+    update.setDataSetId(id);
+    if(overwrite) {
+      update.setProperties(properties);
+    } else {
+      DataSetFetchOptions options = new DataSetFetchOptions();
+      options.withProperties();
+      DataSet oldDataset = openBIS.getDataSets(Arrays.asList(id), options).get(id);
+      for(String property : properties.keySet()) {
+        String newValue = properties.get(property);
+        String oldValue = oldDataset.getProperty(property);
+        if(oldValue == null || oldValue.isEmpty() || oldValue.equals(newValue)) {
+          update.setProperty(property, newValue);
+        } else {
+          update.setProperty(property, oldValue+", "+newValue);//TODO this can be changed to any other strategy
+        }
+      }
+    }
+    openBIS.updateDataSets(Arrays.asList(update));
+  }
+
 }

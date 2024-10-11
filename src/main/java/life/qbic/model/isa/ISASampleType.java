@@ -216,5 +216,15 @@ public class ISASampleType extends AbstractISAObject {
     public String getTitle() {
       return title;
     }
+
+    @Override
+    public String toString() {
+      return "SampleAttributeType{" +
+          "id='" + id + '\'' +
+          ", title='" + title + '\'' +
+          ", baseType='" + baseType + '\'' +
+          '}';
+    }
   }
+
 }

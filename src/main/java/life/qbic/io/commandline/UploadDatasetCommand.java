@@ -26,7 +26,7 @@ public class UploadDatasetCommand implements Runnable {
       + " as parents for the upload. E.g. when this dataset has been generated using these datasets as input.", names = {"-pa", "--parents"})
   private List<String> parents = new ArrayList<>();
   @Mixin
-  AuthenticationOptions auth = new AuthenticationOptions();
+  OpenbisAuthenticationOptions auth = new OpenbisAuthenticationOptions();
 
   private OpenbisConnector openbis;
 
