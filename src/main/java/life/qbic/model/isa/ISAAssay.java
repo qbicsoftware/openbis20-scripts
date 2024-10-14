@@ -7,9 +7,7 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -28,10 +26,15 @@ public class ISAAssay extends AbstractISAObject {
   private Relationships relationships;
   private String title;
 
-  public ISAAssay(String title, String studyId, String assayClass, URI assayType) {
+  public ISAAssay(String title, String studyId, String assayClass) {
     this.title = title;
-    this.attributes = new Attributes(title, assayClass, assayType);
+    this.attributes = new Attributes(title, assayClass);
     this.relationships = new Relationships(studyId);
+  }
+
+  public ISAAssay withAssayType(URI assayType) {
+    this.attributes.withAssayType(assayType.toString());
+    return this;
   }
 
   public ISAAssay withOtherCreators(String otherCreators) {
@@ -188,7 +191,7 @@ public class ISAAssay extends AbstractISAObject {
     private AssayType assayType;
     private String otherCreators = "";
 
-    public Attributes(String title, String assayClass, URI assayType) {
+    public Attributes(String title, String assayClass) {
       this.title = title;
       this.assayClass = new AssayClass(assayClass);
       this.assayType = new AssayType(assayType.toString());
@@ -220,6 +223,10 @@ public class ISAAssay extends AbstractISAObject {
 
     public String getOther_creators() {
       return otherCreators;
+    }
+
+    public void withAssayType(String assayType) {
+      this.assayType = new AssayType(assayType);
     }
 
     private class AssayClass {

@@ -160,8 +160,11 @@ public class OpenbisSeekTranslator {
     Experiment exp = experiment.getExperiment();
     String expType = exp.getType().getCode();
     String title = exp.getCode()+" ("+exp.getPermId().getPermId()+")";
-    ISAAssay assay = new ISAAssay(title, STUDY_ID, experimentTypeToAssayClass.get(expType),
-        new URI(experimentTypeToAssayType.get(expType)));
+    ISAAssay assay = new ISAAssay(title, STUDY_ID, experimentTypeToAssayClass.get(expType));
+    String assayType = experimentTypeToAssayType.get(expType);
+    if(assayType !=null && !assayType.isBlank()) {
+      assay.withAssayType(new URI(assayType));
+    }
 
     SeekStructure result = new SeekStructure(assay, exp.getIdentifier().getIdentifier());
 
