@@ -26,15 +26,10 @@ public class ISAAssay extends AbstractISAObject {
   private Relationships relationships;
   private String title;
 
-  public ISAAssay(String title, String studyId, String assayClass) {
+  public ISAAssay(String title, String studyId, String assayClass, URI assayType) {
     this.title = title;
-    this.attributes = new Attributes(title, assayClass);
+    this.attributes = new Attributes(title, assayClass, assayType);
     this.relationships = new Relationships(studyId);
-  }
-
-  public ISAAssay withAssayType(URI assayType) {
-    this.attributes.withAssayType(assayType.toString());
-    return this;
   }
 
   public ISAAssay withOtherCreators(String otherCreators) {
@@ -191,7 +186,7 @@ public class ISAAssay extends AbstractISAObject {
     private AssayType assayType;
     private String otherCreators = "";
 
-    public Attributes(String title, String assayClass) {
+    public Attributes(String title, String assayClass, URI assayType) {
       this.title = title;
       this.assayClass = new AssayClass(assayClass);
       this.assayType = new AssayType(assayType.toString());
