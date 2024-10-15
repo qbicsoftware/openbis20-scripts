@@ -25,6 +25,9 @@ public class UploadDatasetCommand implements Runnable {
   @Option(arity = "1..*", paramLabel = "<parent_datasets>", description = "Optional list of dataset codes to act"
       + " as parents for the upload. E.g. when this dataset has been generated using these datasets as input.", names = {"-pa", "--parents"})
   private List<String> parents = new ArrayList<>();
+  @Option(arity = "1", paramLabel = "dataset type", description = "The openBIS dataset type code the "
+      + "data should be stored as. UNKNOWN if no type is chosen.", names = {"-t", "--type"})
+  private String datasetType = "UNKNOWN";
   @Mixin
   OpenbisAuthenticationOptions auth = new OpenbisAuthenticationOptions();
 
@@ -32,6 +35,8 @@ public class UploadDatasetCommand implements Runnable {
 
     @Override
     public void run() {
+      App.readConfig();
+
       OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getOpenbisAS(), auth.getOpenbisDSS());
       openbis = new OpenbisConnector(authentication);
 
@@ -40,8 +45,8 @@ public class UploadDatasetCommand implements Runnable {
         return;
       }
       boolean attachToSample = false;
-      boolean attachToExperiment = experimentExists(objectID);
-      if(sampleExists(objectID)) {
+      boolean attachToExperiment = openbis.experimentExists(objectID);
+      if(openbis.sampleExists(objectID)) {
         attachToSample = true;
       }
       if(!attachToSample && !attachToExperiment) {
@@ -56,24 +61,18 @@ public class UploadDatasetCommand implements Runnable {
       System.out.println("Parameters verified, uploading dataset...");
       System.out.println();
       if(attachToExperiment) {
-        DataSetPermId result = openbis.registerDatasetForExperiment(Path.of(dataPath), objectID, parents);
+        DataSetPermId result = openbis.registerDatasetForExperiment(Path.of(dataPath), objectID,
+            datasetType, parents);
         System.out.printf("Dataset %s was successfully attached to experiment%n", result.getPermId());
       } else {
-        DataSetPermId result = openbis.registerDatasetForSample(Path.of(dataPath), objectID, parents);
+        DataSetPermId result = openbis.registerDatasetForSample(Path.of(dataPath), objectID,
+            datasetType, parents);
         System.out.printf("Dataset %s was successfully attached to sample%n", result.getPermId());
       }
     }
 
-  private boolean sampleExists(String objectID) {
-      return openbis.sampleExists(objectID);
-  }
-
   private boolean datasetsExist(List<String> datasetCodes) {
       return openbis.findDataSets(datasetCodes).size() == datasetCodes.size();
-  }
-
-  private boolean experimentExists(String experimentID) {
-      return openbis.experimentExists(experimentID);
   }
 
   private boolean pathValid(String dataPath) {
