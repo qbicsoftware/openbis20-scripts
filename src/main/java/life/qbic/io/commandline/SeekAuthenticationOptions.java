@@ -5,7 +5,6 @@ import static picocli.CommandLine.ArgGroup;
 
 import java.util.StringJoiner;
 import life.qbic.App;
-import life.qbic.io.PropertyReader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import picocli.CommandLine;
@@ -31,7 +30,8 @@ public class SeekAuthenticationOptions {
   public String getSeekUser() {
     if(seekUser == null && App.configProperties.containsKey("seek_user")) {
       seekUser = App.configProperties.get("seek_user");
-    } else {
+    }
+    if (seekUser == null) {
       log.error("No SEEK user/email provided.");
       System.exit(2);
     }
@@ -39,9 +39,10 @@ public class SeekAuthenticationOptions {
   }
 
   public String getSeekURL() {
-    if(seek_url == null && App.configProperties.containsKey("seek_url")) {
+    if(seek_url != null || App.configProperties.containsKey("seek_url")) {
       seek_url = App.configProperties.get("seek_url");
-    } else {
+    }
+    if(seek_url == null) {
       log.error("No URL to the SEEK address provided.");
       System.exit(2);
     }

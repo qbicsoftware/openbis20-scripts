@@ -7,7 +7,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.StringJoiner;
 import life.qbic.App;
-import life.qbic.io.PropertyReader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import picocli.CommandLine;
@@ -38,7 +37,8 @@ public class OpenbisAuthenticationOptions {
   public String getOpenbisUser() {
     if(openbisUser == null && App.configProperties.containsKey("user")) {
       openbisUser = App.configProperties.get("user");
-    } else {
+    }
+    if(openbisUser == null) {
       log.error("No openBIS user provided.");
       System.exit(2);
     }
@@ -49,12 +49,20 @@ public class OpenbisAuthenticationOptions {
     if(dss_url == null && App.configProperties.containsKey("dss")) {
       dss_url = App.configProperties.get("dss");
     }
+    if(dss_url == null) {
+      log.error("No openBIS datastore server URL provided.");
+      System.exit(2);
+    }
     return dss_url;
   }
 
   public String getOpenbisAS() {
     if(as_url == null && App.configProperties.containsKey("as")) {
       as_url = App.configProperties.get("as");
+    }
+    if(as_url == null) {
+      log.error("No openBIS application server URL provided.");
+      System.exit(2);
     }
     return as_url;
   }
