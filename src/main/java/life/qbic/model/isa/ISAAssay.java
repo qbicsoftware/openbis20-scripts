@@ -7,9 +7,7 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -220,6 +218,10 @@ public class ISAAssay extends AbstractISAObject {
 
     public String getOther_creators() {
       return otherCreators;
+    }
+
+    public void withAssayType(String assayType) {
+      this.assayType = new AssayType(assayType);
     }
 
     private class AssayClass {

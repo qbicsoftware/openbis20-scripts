@@ -9,7 +9,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import life.qbic.App;
@@ -24,15 +23,19 @@ import picocli.CommandLine.Parameters;
     description = "lists datasets and their details for a given experiment code")
 public class FindDatasetsCommand implements Runnable {
 
-  @Parameters(arity = "1", paramLabel = "experiment", description = "The code of the experiment data is attached to")
-  private String experimentCode;
-  @Option(arity = "1", paramLabel = "<space>", description = "Optional openBIS spaces to filter samples", names = {"-s", "--space"})
+  @Parameters(arity = "1", paramLabel = "openBIS obejct", description =
+      "The code of the experiment "
+          + "or sample data is attached to.")
+  private String objectCode;
+  @Option(arity = "1", paramLabel = "<space>", description = "Optional openBIS spaces to filter "
+      + "found datasets by", names = {"-s", "--space"})
   private String space;
   @Mixin
   OpenbisAuthenticationOptions auth = new OpenbisAuthenticationOptions();
 
-    @Override
+  @Override
     public void run() {
+      App.readConfig();
       List<String> spaces = new ArrayList<>();
       if (space != null) {
         System.out.println("Querying experiment in space: " + space + "...");
@@ -40,13 +43,36 @@ public class FindDatasetsCommand implements Runnable {
       } else {
         System.out.println("Querying experiment in all available spaces...");
       }
+      if(objectCode.contains("/")) {
+        String[] splt = objectCode.split("/");
+        objectCode = splt[splt.length-1];
+        System.out.println("Query is not an object code, querying for: " + objectCode+" instead.");
+      }
       OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(),
           auth.getOpenbisAS());
       OpenbisConnector openbis = new OpenbisConnector(authentication);
-      List<DataSet> datasets = openbis.listDatasetsOfExperiment(spaces, experimentCode).stream()
-          .sorted(Comparator.comparing(
-              (DataSet d) -> d.getExperiment().getProject().getSpace().getCode())).collect(
-              Collectors.toList());
+
+      List<DataSet> datasetsOfExp = openbis.listDatasetsOfExperiment(spaces, objectCode).stream()
+            .sorted(Comparator.comparing(
+                (DataSet d) -> d.getExperiment().getProject().getSpace().getCode()))
+            .collect(Collectors.toList());
+
+      List<DataSet> datasets = new ArrayList<>();
+
+      if(!datasetsOfExp.isEmpty()) {
+        System.err.println("Found "+datasetsOfExp.size()+" datasets for experiment "+objectCode);
+        datasets.addAll(datasetsOfExp);
+      }
+      List<DataSet> datasetsOfSample = openbis.listDatasetsOfSample(spaces, objectCode).stream()
+            .sorted(Comparator.comparing(
+                (DataSet d) -> d.getExperiment().getProject().getSpace().getCode()))
+            .collect(Collectors.toList());
+
+      if(!datasetsOfSample.isEmpty()) {
+        System.err.println("Found "+datasetsOfSample.size()+" datasets for sample "+objectCode);
+        datasets.addAll(datasetsOfSample);
+      }
+
       Map<String, String> properties = new HashMap<>();
       if (!datasets.isEmpty()) {
         Set<String> patientIDs = openbis.findPropertiesInSampleHierarchy("PATIENT_DKFZ_ID",
@@ -64,7 +90,7 @@ public class FindDatasetsCommand implements Runnable {
       }).collect(Collectors.toList());
       int datasetIndex = 0;
       System.out.println();
-      System.out.printf("Found %s datasets for experiment %s:%n", datasets.size(), experimentCode);
+      System.out.printf("Found %s datasets for %s:%n", datasets.size(), objectCode);
       for (DatasetWithProperties dataSet : datasetWithProperties) {
         datasetIndex++;
         System.out.println("["+datasetIndex+"]");

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -15,14 +16,26 @@ import org.apache.commons.lang3.tuple.Pair;
  */
 public class SeekStructure {
 
-  private final Pair<ISAAssay, String> assayAndOpenBISReference;
+  private final Optional<Pair<ISAAssay, String>> assayAndOpenBISReference;
   private final Map<ISASample, String> samplesWithOpenBISReference;
   private final Map<GenericSeekAsset, DataSetFile> isaToOpenBISFile;
 
   public SeekStructure(ISAAssay assay, String openBISReference) {
-    this.assayAndOpenBISReference = new ImmutablePair<>(assay, openBISReference);
+    this.assayAndOpenBISReference = Optional.of(new ImmutablePair<>(assay, openBISReference));
     this.samplesWithOpenBISReference = new HashMap<>();
     this.isaToOpenBISFile = new HashMap<>();
+  }
+
+  public SeekStructure(ISASample isaSample, String sampleID) {
+    this.samplesWithOpenBISReference = new HashMap<>();
+    this.isaToOpenBISFile = new HashMap<>();
+    this.assayAndOpenBISReference = Optional.empty();
+  }
+
+  public SeekStructure(Map<GenericSeekAsset, DataSetFile> isaToOpenBISFile) {
+    this.isaToOpenBISFile = isaToOpenBISFile;
+    this.samplesWithOpenBISReference = new HashMap<>();
+    this.assayAndOpenBISReference = Optional.empty();
   }
 
   public void addSample(ISASample sample, String openBISReference) {
@@ -33,7 +46,7 @@ public class SeekStructure {
     isaToOpenBISFile.put(asset, file);
   }
 
-  public Pair<ISAAssay, String> getAssayWithOpenBISReference() {
+  public Optional<Pair<ISAAssay, String>> getAssayWithOpenBISReference() {
     return assayAndOpenBISReference;
   }
 

@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import javax.xml.parsers.ParserConfigurationException;
 import life.qbic.App;
-import life.qbic.io.PropertyReader;
 import life.qbic.model.OpenbisSeekTranslator;
 import life.qbic.model.SampleTypesAndMaterials;
 import life.qbic.model.download.OpenbisConnector;
@@ -35,6 +34,8 @@ public class TransferSampleTypesToSeekCommand implements Runnable {
 
   @Override
   public void run() {
+    App.readConfig();
+
     System.out.println("auth...");
 
     OpenBIS authentication = App.loginToOpenBIS(openbisAuth.getOpenbisPassword(),

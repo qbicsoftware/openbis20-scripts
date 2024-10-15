@@ -35,6 +35,7 @@ public class SampleHierarchyCommand implements Runnable {
 
     @Override
     public void run() {
+      App.readConfig();
       List<String> summary = new ArrayList<>();
       List<String> spaces = new ArrayList<>();
         if(space!=null) {
