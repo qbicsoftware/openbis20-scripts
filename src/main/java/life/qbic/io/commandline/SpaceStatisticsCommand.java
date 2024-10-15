@@ -41,6 +41,7 @@ public class SpaceStatisticsCommand implements Runnable {
 
     @Override
     public void run() {
+      App.readConfig();
       List<String> summary = new ArrayList<>();
       List<String> blackList = new ArrayList<>(Arrays.asList("ELN_SETTINGS", "MATERIAL.GLOBAL"));
       List<String> spaces = new ArrayList<>();
