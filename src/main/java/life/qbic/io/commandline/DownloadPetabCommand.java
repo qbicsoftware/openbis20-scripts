@@ -28,6 +28,7 @@ public class DownloadPetabCommand implements Runnable {
 
     @Override
     public void run() {
+      App.readConfig();
       OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(),
           auth.getOpenbisAS(), auth.getOpenbisDSS());
       OpenbisConnector openbis = new OpenbisConnector(authentication);
@@ -35,7 +36,7 @@ public class DownloadPetabCommand implements Runnable {
       List<DataSet> datasets = openbis.findDataSets(Collections.singletonList(datasetCode));
 
       if(datasets.isEmpty()) {
-        System.out.println(datasetCode+" not found");
+        System.out.println("Dataset "+datasetCode+" not found");
         return;
       }
       DatasetWithProperties result = new DatasetWithProperties(datasets.get(0));
@@ -54,6 +55,7 @@ public class DownloadPetabCommand implements Runnable {
       try {
         System.out.println("Adding dataset identifier to metaInformation.yaml.");
         parser.addDatasetId(outputPath, datasetCode);
+        parser.addPatientIDs(outputPath, patientIDs);
       } catch (IOException e) {
         System.out.println("Could not add dataset identifier.");
         throw new RuntimeException(e);
