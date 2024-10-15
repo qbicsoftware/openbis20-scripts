@@ -2,6 +2,8 @@ package life.qbic.io.commandline;
 
 import ch.ethz.sis.openbis.generic.OpenBIS;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
+import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.DataSetFile;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -17,15 +19,18 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.xml.parsers.ParserConfigurationException;
 import life.qbic.App;
-import life.qbic.model.AssayWithQueuedAssets;
+import life.qbic.model.DatasetWithProperties;
 import life.qbic.model.OpenbisExperimentWithDescendants;
+import life.qbic.model.OpenbisSampleWithDatasets;
 import life.qbic.model.OpenbisSeekTranslator;
 import life.qbic.model.download.SEEKConnector.SeekStructurePostRegistrationInformation;
+import life.qbic.model.isa.GenericSeekAsset;
 import life.qbic.model.isa.SeekStructure;
 import life.qbic.model.download.OpenbisConnector;
 import life.qbic.model.download.SEEKConnector;
 import life.qbic.model.download.SEEKConnector.AssetToUpload;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.tuple.Pair;
 import org.xml.sax.SAXException;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
@@ -48,8 +53,8 @@ public class TransferDataToSeekCommand implements Runnable {
   @Parameters(arity = "1", paramLabel = "openbis id", description = "The identifier of the "
       + "experiment, sample or dataset to transfer.")
   private String objectID;
-  @Parameters(arity = "1", paramLabel = "seek study", description = "Title of the study in SEEK"
-      + "where nodes should be added.")
+  @Option(names = "--seek-study", description = "Title of the study in SEEK where nodes should be "
+      + "added. Mandatory for assay creation.")
   private String studyTitle;
   @Option(names = "--seek-project", description = "Title of the project in SEEK where nodes should"
       + "be added. Can alternatively be provided via the config file as 'seek_default_project'.")
@@ -87,7 +92,6 @@ public class TransferDataToSeekCommand implements Runnable {
     } else {
       System.out.printf("No SEEK project title provided, will search config file.%n");
     }
-    System.out.printf("Provided SEEK study title: %s%n", studyTitle);
     System.out.printf("Transfer datasets to SEEK? %s%n", transferData);
     System.out.printf("Update existing assay if found? %s%n", !noUpdate);
     if(blacklistFile!=null && !blacklistFile.isBlank()) {
@@ -99,7 +103,7 @@ public class TransferDataToSeekCommand implements Runnable {
     OpenBIS authentication = App.loginToOpenBIS(openbisAuth.getOpenbisPassword(),
         openbisAuth.getOpenbisUser(), openbisAuth.getOpenbisAS(), openbisAuth.getOpenbisDSS());
 
-    openbis = new OpenbisConnector(authentication);
+    this.openbis = new OpenbisConnector(authentication);
 
     boolean isSample = false;
     boolean isDataSet = false;
@@ -107,6 +111,13 @@ public class TransferDataToSeekCommand implements Runnable {
     System.out.println("Searching for specified object in openBIS...");
 
     boolean isExperiment = experimentExists(objectID);
+
+    if (isExperiment && (studyTitle == null || studyTitle.isBlank())) {
+      System.out.printf(
+          "No SEEK study title was provided. This is mandatory if an openBIS experiment is to be transferred%n");
+      return;
+    }
+
     if (!isExperiment && sampleExists(objectID)) {
       isSample = true;
     }
@@ -140,36 +151,130 @@ public class TransferDataToSeekCommand implements Runnable {
              ParserConfigurationException | SAXException e) {
       throw new RuntimeException(e);
     }
-
+    SeekStructurePostRegistrationInformation postRegInfo;
     try {
-      System.out.println("Collecting information from openBIS...");
-      OpenbisExperimentWithDescendants experiment = openbis.getExperimentWithDescendants(objectID);
-      System.out.println("Trying to find existing corresponding assay in SEEK...");
-      Optional<String> assayID = getAssayIDForOpenBISExperiment(experiment.getExperiment());
-      assayID.ifPresent(x -> System.out.println("Found assay with id "+assayID.get()));
-      Set<String> blacklist = parseBlackList(blacklistFile);
-      System.out.println("Translating openBIS property codes to SEEK names...");
-      Map<String, String> sampleTypesToIds = seek.getSampleTypeNamesToIDs();
-      System.out.println("Creating SEEK structure...");
-      SeekStructure nodeWithChildren = translator.translate(experiment, sampleTypesToIds, blacklist,
-          transferData);
-
-      if(assayID.isEmpty() || noUpdate) {
-        System.out.println("Creating new node(s)...");
-        SeekStructurePostRegistrationInformation postRegInfo = createNewNodes(nodeWithChildren);
-        System.out.println("Creating links to SEEK objects in openBIS...");
-        openbis.createSeekLinks(postRegInfo);
+      if (isExperiment) {
+        postRegInfo = handleExperimentTransfer();
+      } else if (isSample) {
+        postRegInfo = handleSampleTransfer();
       } else {
-        System.out.println("Updating nodes...");
-        SeekStructurePostRegistrationInformation postRegInfo = updateNodes(nodeWithChildren,
-            assayID.get());
-        System.out.println("Updating links to SEEK objects in openBIS...");
-        openbis.updateSeekLinks(postRegInfo);
+        postRegInfo = handleDatasetTransfer();
       }
-    } catch (URISyntaxException | InterruptedException | IOException e) {
+    } catch (URISyntaxException | IOException | InterruptedException e) {
       throw new RuntimeException(e);
     }
+
+    System.out.println("Creating links to new SEEK objects in openBIS...");
+    openbis.createSeekLinks(postRegInfo);
+
     System.out.println("Done");
+  }
+
+  private SeekStructurePostRegistrationInformation handleExperimentTransfer()
+      throws URISyntaxException, IOException, InterruptedException {
+    System.out.println("Collecting information from openBIS...");
+    OpenbisExperimentWithDescendants experiment = openbis.getExperimentWithDescendants(objectID);
+    Set<String> blacklist = parseBlackList(blacklistFile);
+    System.out.println("Translating openBIS property codes to SEEK names...");
+    Map<String, String> sampleTypesToIds = seek.getSampleTypeNamesToIDs();
+    System.out.println("Creating SEEK structure...");
+    SeekStructure nodeWithChildren = translator.translate(experiment, sampleTypesToIds, blacklist,
+        transferData);
+    if (!noUpdate) {
+      System.out.println("Trying to find existing corresponding assay in SEEK...");
+      Optional<String> assayID = getAssayIDForOpenBISExperiment(experiment.getExperiment());
+      assayID.ifPresent(x -> System.out.println("Found assay with id " + assayID.get()));
+      if (assayID.isEmpty()) {
+        System.out.println("Creating new node(s)...");
+        return createNewAssayStructure(nodeWithChildren);
+      } else {
+        System.out.println("Updating nodes...");
+        return updateAssayStructure(nodeWithChildren, assayID.get());
+      }
+    }
+    System.out.println("Creating new node(s)...");
+    return createNewAssayStructure(nodeWithChildren);
+  }
+
+  private SeekStructurePostRegistrationInformation handleSampleTransfer()
+      throws URISyntaxException, IOException, InterruptedException {
+    System.out.println("Collecting information from openBIS...");
+    OpenbisSampleWithDatasets sampleWithDatasets = openbis.getSampleWithDatasets(objectID);
+    Set<String> blacklist = parseBlackList(blacklistFile);
+    System.out.println("Translating openBIS property codes to SEEK names...");
+    Map<String, String> sampleTypesToIds = seek.getSampleTypeNamesToIDs();
+    System.out.println("Trying to find existing corresponding sample in SEEK...");
+    Optional<String> sampleID = getSampleIDForOpenBISSample(sampleWithDatasets.getSample());
+    sampleID.ifPresent(x -> System.out.println("Found sample with id "+sampleID.get()));
+    SeekStructure nodeWithChildren = translator.translate(sampleWithDatasets, sampleTypesToIds,
+        blacklist, transferData);
+
+    System.out.println("Creating SEEK structure...");
+    if(sampleID.isEmpty() || noUpdate) {
+      System.out.println("Creating new node(s)...");
+      return createNewSampleStructure(nodeWithChildren);
+    } else {
+      System.out.println("Updating nodes...");
+      return updateSampleStructure(nodeWithChildren, sampleID.get());
+    }
+  }
+
+  private SeekStructurePostRegistrationInformation handleDatasetTransfer()
+      throws URISyntaxException, IOException, InterruptedException {
+    System.out.println("Collecting information from openBIS...");
+    Pair<DatasetWithProperties, List<DataSetFile>> datasetWithFiles = openbis.getDataSetWithFiles(
+        objectID);
+    Set<String> blacklist = parseBlackList(blacklistFile);
+    //TODO is this necessary?
+    //System.out.println("Trying to find existing corresponding assets in SEEK...");
+    //List<String> assetIDs = seek.searchAssetsContainingKeyword(datasetWithFiles.getLeft().getCode());
+    //System.out.println("Found existing asset ids: "+assetIDs);
+    SeekStructure nodeWithChildren = translator.translate(datasetWithFiles, blacklist, transferData);
+
+    System.out.println("Creating new asset(s)...");
+    return createNewAssetsForDataset(nodeWithChildren.getISAFileToDatasetFiles());
+  }
+
+  private SeekStructurePostRegistrationInformation updateSampleStructure(
+      SeekStructure nodeWithChildren, String sampleID)
+      throws URISyntaxException, IOException, InterruptedException {
+    SeekStructurePostRegistrationInformation postRegInfo =
+        seek.updateSampleNode(nodeWithChildren, sampleID);
+    List<AssetToUpload> assetsToUpload = postRegInfo.getAssetsToUpload();
+    if (transferData) {
+      handleDataTransfer(assetsToUpload);
+    }
+    postRegInfo.getExperimentIDWithEndpoint().ifPresentOrElse(
+        (value) -> System.out.printf("%s was successfully updated.%n", value.getRight()),
+        () -> System.out.printf("Update performed, but assay id not found in post update info.%n")
+    );
+    return postRegInfo;
+  }
+
+  private SeekStructurePostRegistrationInformation createNewSampleStructure(
+      SeekStructure nodeWithChildren) throws URISyntaxException, IOException, InterruptedException {
+    SeekStructurePostRegistrationInformation postRegistrationInformation =
+        seek.createSampleWithAssets(nodeWithChildren);
+    List<AssetToUpload> assetsOfAssayToUpload = postRegistrationInformation.getAssetsToUpload();
+    if (transferData) {
+      handleDataTransfer(assetsOfAssayToUpload);
+    }
+    System.out.printf("Sample was successfully created.%n");
+    return postRegistrationInformation;
+  }
+
+  private SeekStructurePostRegistrationInformation createNewAssetsForDataset(
+      Map<GenericSeekAsset, DataSetFile> assets) throws URISyntaxException, IOException,
+      InterruptedException {
+
+    SeekStructurePostRegistrationInformation postRegistrationInformation =
+        seek.createStandaloneAssets(assets);
+    List<AssetToUpload> assetsOfAssayToUpload = postRegistrationInformation.getAssetsToUpload();
+    if (transferData) {
+      handleDataTransfer(assetsOfAssayToUpload);
+    }
+    System.out.printf("Assets were successfully created.%n");
+    return postRegistrationInformation;
   }
 
   private Set<String> parseBlackList(String blacklistFile) {
@@ -195,50 +300,64 @@ public class TransferDataToSeekCommand implements Runnable {
     }
   }
 
-  private SeekStructurePostRegistrationInformation updateNodes(SeekStructure nodeWithChildren,
+  private SeekStructurePostRegistrationInformation updateAssayStructure(SeekStructure nodeWithChildren,
       String assayID) throws URISyntaxException, IOException, InterruptedException {
-    SeekStructurePostRegistrationInformation postRegInfo = seek.updateNode(nodeWithChildren, assayID);
-    System.out.printf("%s was successfully updated.%n", postRegInfo.getExperimentIDWithEndpoint().getRight());
+    SeekStructurePostRegistrationInformation postRegInfo = seek.updateAssayNode(nodeWithChildren,
+        assayID);
+    List<AssetToUpload> assetsToUpload = postRegInfo.getAssetsToUpload();
+    if (transferData) {
+      handleDataTransfer(assetsToUpload);
+    }
+    postRegInfo.getExperimentIDWithEndpoint().ifPresentOrElse(
+        (value) -> System.out.printf("%s was successfully updated.%n", value.getRight()),
+        () -> System.out.printf("Update performed, but assay id not found in post update info.%n")
+    );
     return postRegInfo;
   }
 
-  private SeekStructurePostRegistrationInformation createNewNodes(SeekStructure nodeWithChildren)
+  private SeekStructurePostRegistrationInformation createNewAssayStructure(
+      SeekStructure nodeWithChildren)
       throws URISyntaxException, IOException, InterruptedException {
-    SeekStructurePostRegistrationInformation postRegistrationInformation =
+    SeekStructurePostRegistrationInformation postRegInfo =
         seek.createNode(nodeWithChildren);
-    AssayWithQueuedAssets assetsOfAssayToUpload = postRegistrationInformation.getAssayWithQueuedAssets();
-    if(transferData) {
-      final String tmpFolderPath = "tmp/";
-      for(AssetToUpload asset : assetsOfAssayToUpload.getAssets()) {
-        String filePath = asset.getFilePath();
-        String dsCode = asset.getDataSetCode();
-        if(asset.getFileSizeInBytes() > 1000*1024*1024) {
-          System.out.printf("Skipping %s due to size...%n",
-              filePath);
-        } else if (asset.getFileSizeInBytes() > 300 * 1024 * 1024) {
-          System.out.printf("File is %s MB...streaming might take a while%n",
-              asset.getFileSizeInBytes() / (1024 * 1024));
-          System.out.printf("Downloading file %s from openBIS to tmp folder due to size...%n",
-              filePath);
-          File tmpFile = openbis.downloadDataset(tmpFolderPath, dsCode, filePath);
+    List<AssetToUpload> assetsToUpload = postRegInfo.getAssetsToUpload();
+    if (transferData) {
+      handleDataTransfer(assetsToUpload);
+    }
+    System.out.printf("Assay was successfully created.%n");
+    return postRegInfo;
+  }
 
-          System.out.printf("Uploading file to SEEK...%n");
-          String fileURL = seek.uploadFileContent(asset.getBlobEndpoint(), tmpFile.getAbsolutePath());
-          System.out.printf("File stored here: %s%n", fileURL);
-        } else {
-          System.out.printf("Streaming file %s from openBIS to SEEK...%n", asset.getFilePath());
+  private void handleDataTransfer(List<AssetToUpload> assets)
+      throws URISyntaxException, IOException, InterruptedException {
+    final String tmpFolderPath = "tmp/";
+    for(AssetToUpload asset : assets) {
+      String filePath = asset.getFilePath();
+      String dsCode = asset.getDataSetCode();
+      if(asset.getFileSizeInBytes() > 1000*1024*1024) {
+        System.out.printf("Skipping %s due to size...%n",
+            filePath);
+      } else if (asset.getFileSizeInBytes() > 300 * 1024 * 1024) {
+        System.out.printf("File is %s MB...streaming might take a while%n",
+            asset.getFileSizeInBytes() / (1024 * 1024));
+        System.out.printf("Downloading file %s from openBIS to tmp folder due to size...%n",
+            filePath);
+        File tmpFile = openbis.downloadDataset(tmpFolderPath, dsCode, filePath);
 
-          String fileURL = seek.uploadStreamContent(asset.getBlobEndpoint(),
-              () -> openbis.streamDataset(asset.getDataSetCode(), asset.getFilePath()));
-          System.out.printf("File stored here: %s%n", fileURL);
-        }
+        System.out.printf("Uploading file to SEEK...%n");
+        String fileURL = seek.uploadFileContent(asset.getBlobEndpoint(), tmpFile.getAbsolutePath());
+        System.out.printf("File stored here: %s%n", fileURL);
+      } else {
+        System.out.printf("Streaming file %s from openBIS to SEEK...%n", asset.getFilePath());
+
+        String fileURL = seek.uploadStreamContent(asset.getBlobEndpoint(),
+            () -> openbis.streamDataset(asset.getDataSetCode(), asset.getFilePath()));
+        System.out.printf("File stored here: %s%n", fileURL);
+
       }
       System.out.printf("Cleaning up temp folder%n");
       cleanupTemp(new File(tmpFolderPath));
     }
-
-    System.out.printf("%s was successfully created.%n", assetsOfAssayToUpload.getAssayEndpoint());
-    return postRegistrationInformation;
   }
 
   private boolean sampleExists(String objectID) {
@@ -262,13 +381,26 @@ public class TransferDataToSeekCommand implements Runnable {
     String permID = experiment.getPermId().getPermId();
     List<String> assayIDs = seek.searchAssaysContainingKeyword(permID);
     if(assayIDs.isEmpty()) {
-      System.err.println("no assay found containing "+permID);
       return Optional.empty();
     }
     if(assayIDs.size() == 1) {
       return Optional.of(assayIDs.get(0));
     }
-    throw new RuntimeException("Experiment identifier "+permID+ " was found in more than one assay: "+assayIDs);
+    throw new RuntimeException("Experiment identifier "+permID+ " was found in more than one assay: "
+        +assayIDs+". Don't know which assay to update.");
+  }
+
+  private Optional<String> getSampleIDForOpenBISSample(Sample sample)
+      throws URISyntaxException, IOException, InterruptedException {
+    String id = sample.getIdentifier().getIdentifier();
+    List<String> sampleIDs = seek.searchSamplesContainingKeyword(id);
+    if(sampleIDs.isEmpty()) {
+      return Optional.empty();
+    }
+    if(sampleIDs.size() == 1) {
+      return Optional.of(sampleIDs.get(0));
+    }
+    throw new RuntimeException("Experiment identifier "+id+ " was found in more than one sample: "+sampleIDs);
   }
 
   private void cleanupTemp(File tmpFolder) {

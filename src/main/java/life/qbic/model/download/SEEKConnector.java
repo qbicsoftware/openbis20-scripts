@@ -27,7 +27,6 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import javax.xml.parsers.ParserConfigurationException;
-import life.qbic.model.AssayWithQueuedAssets;
 import life.qbic.model.AssetInformation;
 import life.qbic.model.OpenbisSeekTranslator;
 import life.qbic.model.SampleInformation;
@@ -51,6 +50,8 @@ public class SEEKConnector {
   private byte[] credentials;
   private OpenbisSeekTranslator translator;
   private final String DEFAULT_PROJECT_ID;
+  private final List<String> ASSET_TYPES = new ArrayList<>(Arrays.asList("data_files", "models",
+      "sops", "documents", "publications"));
 
   public SEEKConnector(String seekURL, byte[] httpCredentials, String openBISBaseURL,
       String defaultProjectTitle) throws URISyntaxException, IOException,
@@ -135,6 +136,8 @@ public class SEEKConnector {
     HttpResponse<String> response = HttpClient.newBuilder().build()
         .send(buildAuthorizedPOSTRequest(endpoint, assay.toJson()),
             BodyHandlers.ofString());
+
+    System.err.println(assay.toJson());
 
     if(response.statusCode()!=200) {
       throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
@@ -376,12 +379,14 @@ public class SEEKConnector {
    * @throws URISyntaxException
    * @throws InterruptedException
    */
-  public List<AssetToUpload> createAssetsForAssays(Map<GenericSeekAsset, DataSetFile> isaToOpenBISFile,
-      List<String> assays)
+  public List<AssetToUpload> createAssetsForAssays(Map<GenericSeekAsset,
+      DataSetFile> isaToOpenBISFile, List<String> assays)
       throws IOException, URISyntaxException, InterruptedException {
     List<AssetToUpload> result = new ArrayList<>();
     for (GenericSeekAsset isaFile : isaToOpenBISFile.keySet()) {
-      isaFile.withAssays(assays);
+      if(!assays.isEmpty()) {
+        isaFile.withAssays(assays);
+      }
       result.add(createAsset(isaToOpenBISFile.get(isaFile).getDataSetPermId().getPermId(),
           isaFile));
     }
@@ -512,6 +517,45 @@ public class SEEKConnector {
   }
 
   /**
+   * Searches for samples containing a search term and returns a list of found sample ids
+   * @param searchTerm the search term that should be in the assay properties - e.g. an openBIS id
+   * @return
+   * @throws URISyntaxException
+   * @throws IOException
+   * @throws InterruptedException
+   */
+  public List<String> searchSamplesContainingKeyword(String searchTerm)
+      throws URISyntaxException, IOException, InterruptedException {
+
+    JsonNode result = genericSearch("samples", "*"+searchTerm+"*");
+
+    JsonNode hits = result.path("data");
+    List<String> assayIDs = new ArrayList<>();
+    for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
+      JsonNode hit = it.next();
+      assayIDs.add(hit.get("id").asText());
+    }
+    return assayIDs;
+  }
+
+
+  public List<String> searchAssetsContainingKeyword(String searchTerm)
+      throws URISyntaxException, IOException, InterruptedException {
+    List<String> assetIDs = new ArrayList<>();
+    for(String type : ASSET_TYPES) {
+      JsonNode result = genericSearch(type, "*"+searchTerm+"*");
+
+      JsonNode hits = result.path("data");
+      for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
+        JsonNode hit = it.next();
+        assetIDs.add(hit.get("id").asText());
+      }
+    }
+    return assetIDs;
+  }
+
+
+  /**
    * Updates information of an existing assay, its samples and attached assets. Missing samples and
    * assets are created, but nothing missing from the new structure is deleted from SEEK.
    * @param nodeWithChildren the translated Seek structure as it should be once the update is done
@@ -520,7 +564,7 @@ public class SEEKConnector {
    * data to newly created assets. In the case of the update use case, only newly created objects
    * will be contained in the return object.
    */
-  public SeekStructurePostRegistrationInformation updateNode(SeekStructure nodeWithChildren,
+  public SeekStructurePostRegistrationInformation updateAssayNode(SeekStructure nodeWithChildren,
       String assayID) throws URISyntaxException, IOException, InterruptedException {
     JsonNode assayData = fetchAssayData(assayID).get("data");
     Map<String, SampleInformation> sampleInfos = collectSampleInformation(assayData);
@@ -593,22 +637,25 @@ public class SEEKConnector {
     }
 
     String assayEndpoint = apiURL + "/assays/" + assayID;
-    AssayWithQueuedAssets assayWithQueuedAssets =
-        new AssayWithQueuedAssets(assayEndpoint, assetsToUpload);
-    String expID = nodeWithChildren.getAssayWithOpenBISReference().getRight();
+    if(nodeWithChildren.getAssayWithOpenBISReference().isEmpty()) {
+        throw new RuntimeException("No assay and openBIS reference found. Object has not been "
+            + "initialized using an assay object and openBIS experiment reference.");
+    }
+    String expID = nodeWithChildren.getAssayWithOpenBISReference().get().getRight();
     Pair<String, String> experimentIDWithEndpoint = new ImmutablePair<>(expID, assayEndpoint);
 
-    return new SeekStructurePostRegistrationInformation(assayWithQueuedAssets,
-        experimentIDWithEndpoint, sampleIDsWithEndpoints, datasetIDsWithEndpoints);
+    SeekStructurePostRegistrationInformation postRegInfo =
+        new SeekStructurePostRegistrationInformation(assetsToUpload, sampleIDsWithEndpoints,
+            datasetIDsWithEndpoints);
+    postRegInfo.setExperimentIDWithEndpoint(experimentIDWithEndpoint);
+        return postRegInfo;
   }
 
   private Map<String, AssetInformation> collectAssetInformation(JsonNode assayData)
       throws URISyntaxException, IOException, InterruptedException {
-    List<String> assetTypes = new ArrayList<>(Arrays.asList("data_files", "models", "sops",
-        "documents", "publications"));
     Map<String, AssetInformation> assets = new HashMap<>();
     JsonNode relationships = assayData.get("relationships");
-    for(String type : assetTypes) {
+    for(String type : ASSET_TYPES) {
       for (Iterator<JsonNode> it = relationships.get(type).get("data").elements(); it.hasNext(); ) {
           String assetID = it.next().get("id").asText();
           AssetInformation assetInfo = fetchAssetInformation(assetID, type);
@@ -674,6 +721,71 @@ public class SEEKConnector {
     return Optional.empty();
   }
 
+  public SeekStructurePostRegistrationInformation updateSampleNode(SeekStructure nodeWithChildren,
+      String sampleID) throws URISyntaxException, IOException, InterruptedException {
+    SampleInformation existingSampleInfo = fetchSampleInformation(sampleID);
+    //TODO to be able to connect samples with assets, we need to create a new assay, here
+
+    // compare samples
+    Map<ISASample, String> newSamplesWithReferences = nodeWithChildren.getSamplesWithOpenBISReference();
+
+    List<ISASample> samplesToCreate = new ArrayList<>();
+    for (ISASample newSample : newSamplesWithReferences.keySet()) {
+      String openBisID = newSamplesWithReferences.get(newSample);
+      if (!existingSampleInfo.getOpenBisIdentifier().equals(openBisID)) {
+        samplesToCreate.add(newSample);
+        System.out.printf("%s not found in SEEK. It will be created.%n", openBisID);
+      } else {
+        Map<String, Object> newAttributes = newSample.fetchCopyOfAttributeMap();
+        for (String key : newAttributes.keySet()) {
+          Object newValue = newAttributes.get(key);
+          Object oldValue = existingSampleInfo.getAttributes().get(key);
+
+          boolean oldEmpty = oldValue == null || oldValue.toString().isEmpty();
+          boolean newEmpty = newValue == null || newValue.toString().isEmpty();
+          if ((!oldEmpty && !newEmpty) && !newValue.equals(oldValue)) {
+            System.out.printf("Mismatch found in attributes of %s. Sample will be updated.%n",
+                openBisID);
+            updateSample(newSample, sampleID);
+          }
+        }
+      }
+    }
+
+    // compare assets
+    Map<GenericSeekAsset, DataSetFile> newAssetsToFiles = nodeWithChildren.getISAFileToDatasetFiles();
+
+    //TODO follow creation of assets for assay, no way to be sure these are attached to similar samples
+    List<GenericSeekAsset> assetsToCreate = new ArrayList<>();
+
+    Map<String, String> sampleIDsWithEndpoints = new HashMap<>();
+    for (ISASample sample : samplesToCreate) {
+      String sampleEndpoint = createSample(sample);
+      sampleIDsWithEndpoints.put(newSamplesWithReferences.get(sample), sampleEndpoint);
+    }
+    List<AssetToUpload> assetsToUpload = new ArrayList<>();
+
+    for (GenericSeekAsset asset : assetsToCreate) {
+      assetsToUpload.add(createAsset(newAssetsToFiles.get(asset).getDataSetPermId().getPermId(),
+          asset));
+    }
+    Map<String, Set<String>> datasetIDsWithEndpoints = new HashMap<>();
+
+    for (AssetToUpload asset : assetsToUpload) {
+      String endpointWithoutBlob = blobEndpointToAssetURL(asset.getBlobEndpoint());
+      String dsCode = asset.getDataSetCode();
+      if (datasetIDsWithEndpoints.containsKey(dsCode)) {
+        datasetIDsWithEndpoints.get(dsCode).add(endpointWithoutBlob);
+      } else {
+        datasetIDsWithEndpoints.put(dsCode, new HashSet<>(
+            List.of(endpointWithoutBlob)));
+      }
+    }
+
+    return new SeekStructurePostRegistrationInformation(assetsToUpload, sampleIDsWithEndpoints,
+        datasetIDsWithEndpoints);
+  }
+
   private SampleInformation fetchSampleInformation(String sampleID) throws URISyntaxException,
       IOException, InterruptedException {
     String endpoint = apiURL+"/samples/"+sampleID;
@@ -723,12 +835,20 @@ public class SEEKConnector {
   public SeekStructurePostRegistrationInformation createNode(SeekStructure nodeWithChildren)
       throws URISyntaxException, IOException, InterruptedException {
 
-    Pair<ISAAssay, String> assayIDPair = nodeWithChildren.getAssayWithOpenBISReference();
+    if(nodeWithChildren.getAssayWithOpenBISReference().isEmpty()) {
+        throw new RuntimeException("No assay and openBIS reference found. Object has not been "
+            + "initialized using an assay object and openBIS experiment reference.");
+    }
+
+    Pair<ISAAssay, String> assayIDPair = nodeWithChildren.getAssayWithOpenBISReference().get();
 
     String assayID = addAssay(assayIDPair.getKey());
     String assayEndpoint = apiURL+"/assays/"+assayID;
     Pair<String, String> experimentIDWithEndpoint =
         new ImmutablePair<>(assayIDPair.getValue(), assayEndpoint);
+
+    //wait for a bit, so we can be sure the assay that will be referenced by the samples has been created
+    Thread.sleep(3000);
 
     Map<String, String> sampleIDsWithEndpoints = new HashMap<>();
     Map<ISASample, String> samplesWithReferences = nodeWithChildren.getSamplesWithOpenBISReference();
@@ -740,12 +860,12 @@ public class SEEKConnector {
 
     Map<GenericSeekAsset, DataSetFile> isaToFileMap = nodeWithChildren.getISAFileToDatasetFiles();
 
-    AssayWithQueuedAssets assayWithQueuedAssets = new AssayWithQueuedAssets(assayEndpoint,
-        createAssetsForAssays(isaToFileMap, Collections.singletonList(assayID)));
+    List<AssetToUpload> assetsToUpload = createAssetsForAssays(isaToFileMap,
+        Collections.singletonList(assayID));
 
     Map<String, Set<String>> datasetIDsWithEndpoints = new HashMap<>();
 
-    for(AssetToUpload asset : assayWithQueuedAssets.getAssets()) {
+    for(AssetToUpload asset : assetsToUpload) {
       String endpointWithoutBlob = blobEndpointToAssetURL(asset.getBlobEndpoint());
       String dsCode = asset.getDataSetCode();
       if(datasetIDsWithEndpoints.containsKey(dsCode)) {
@@ -755,8 +875,61 @@ public class SEEKConnector {
             List.of(endpointWithoutBlob)));
       }
     }
-    return new SeekStructurePostRegistrationInformation(assayWithQueuedAssets,
-        experimentIDWithEndpoint, sampleIDsWithEndpoints, datasetIDsWithEndpoints);
+    SeekStructurePostRegistrationInformation postRegInfo =
+        new SeekStructurePostRegistrationInformation(assetsToUpload, sampleIDsWithEndpoints,
+            datasetIDsWithEndpoints);
+    postRegInfo.setExperimentIDWithEndpoint(experimentIDWithEndpoint);
+    return postRegInfo;
+  }
+
+  public SeekStructurePostRegistrationInformation createSampleWithAssets(SeekStructure nodeWithChildren)
+      throws URISyntaxException, IOException, InterruptedException {
+   Map<String, String> sampleIDsWithEndpoints = new HashMap<>();
+    Map<ISASample, String> samplesWithReferences = nodeWithChildren.getSamplesWithOpenBISReference();
+    for(ISASample sample : samplesWithReferences.keySet()) {
+      String sampleEndpoint = createSample(sample);
+      sampleIDsWithEndpoints.put(samplesWithReferences.get(sample), sampleEndpoint);
+    }
+
+    Map<GenericSeekAsset, DataSetFile> isaToFileMap = nodeWithChildren.getISAFileToDatasetFiles();
+
+    List<AssetToUpload> assetsToUpload = createAssetsForAssays(isaToFileMap, new ArrayList<>());
+
+    Map<String, Set<String>> datasetIDsWithEndpoints = new HashMap<>();
+
+    for(AssetToUpload asset : assetsToUpload) {
+      String endpointWithoutBlob = blobEndpointToAssetURL(asset.getBlobEndpoint());
+      String dsCode = asset.getDataSetCode();
+      if(datasetIDsWithEndpoints.containsKey(dsCode)) {
+        datasetIDsWithEndpoints.get(dsCode).add(endpointWithoutBlob);
+      } else {
+        datasetIDsWithEndpoints.put(dsCode, new HashSet<>(
+            List.of(endpointWithoutBlob)));
+      }
+    }
+    return new SeekStructurePostRegistrationInformation(assetsToUpload, sampleIDsWithEndpoints,
+        datasetIDsWithEndpoints);
+  }
+
+  public SeekStructurePostRegistrationInformation createStandaloneAssets(
+      Map<GenericSeekAsset, DataSetFile> isaToFileMap)
+      throws IOException, URISyntaxException, InterruptedException {
+
+    List<AssetToUpload> assetsToUpload = createAssetsForAssays(isaToFileMap, new ArrayList<>());
+
+    Map<String, Set<String>> datasetIDsWithEndpoints = new HashMap<>();
+
+    for(AssetToUpload asset : assetsToUpload) {
+      String endpointWithoutBlob = blobEndpointToAssetURL(asset.getBlobEndpoint());
+      String dsCode = asset.getDataSetCode();
+      if(datasetIDsWithEndpoints.containsKey(dsCode)) {
+        datasetIDsWithEndpoints.get(dsCode).add(endpointWithoutBlob);
+      } else {
+        datasetIDsWithEndpoints.put(dsCode, new HashSet<>(
+            List.of(endpointWithoutBlob)));
+      }
+    }
+    return new SeekStructurePostRegistrationInformation(assetsToUpload, datasetIDsWithEndpoints);
   }
 
   public OpenbisSeekTranslator getTranslator() {
@@ -797,25 +970,37 @@ public class SEEKConnector {
 
   public class SeekStructurePostRegistrationInformation {
 
-    private final AssayWithQueuedAssets assayWithQueuedAssets;
-    private final Pair<String, String> experimentIDWithEndpoint;
+    private final List<AssetToUpload> assetsToUpload;
+    private Optional<Pair<String, String>> experimentIDWithEndpoint;
     private final Map<String, String> sampleIDsWithEndpoints;
     private final Map<String, Set<String>> datasetIDsWithEndpoints;
 
-    public SeekStructurePostRegistrationInformation(AssayWithQueuedAssets assayWithQueuedAssets,
-        Pair<String, String> experimentIDWithEndpoint, Map<String, String> sampleIDsWithEndpoints,
+    public SeekStructurePostRegistrationInformation(List<AssetToUpload> assetsToUpload,
+        Map<String, String> sampleIDsWithEndpoints,
         Map<String, Set<String>> datasetIDsWithEndpoints) {
-      this.assayWithQueuedAssets = assayWithQueuedAssets;
-      this.experimentIDWithEndpoint = experimentIDWithEndpoint;
+      this.assetsToUpload = assetsToUpload;
       this.sampleIDsWithEndpoints = sampleIDsWithEndpoints;
       this.datasetIDsWithEndpoints = datasetIDsWithEndpoints;
+      this.experimentIDWithEndpoint = Optional.empty();
     }
 
-    public AssayWithQueuedAssets getAssayWithQueuedAssets() {
-      return assayWithQueuedAssets;
+    public SeekStructurePostRegistrationInformation(List<AssetToUpload> assetsToUpload,
+        Map<String, Set<String>> datasetIDsWithEndpoints) {
+      this.sampleIDsWithEndpoints = new HashMap<>();
+      this.datasetIDsWithEndpoints = datasetIDsWithEndpoints;
+      this.assetsToUpload = assetsToUpload;
+      this.experimentIDWithEndpoint = Optional.empty();
     }
 
-    public Pair<String, String> getExperimentIDWithEndpoint() {
+    public void setExperimentIDWithEndpoint(Pair<String, String> experimentIDWithEndpoint) {
+      this.experimentIDWithEndpoint = Optional.of(experimentIDWithEndpoint);
+    }
+
+    public List<AssetToUpload> getAssetsToUpload() {
+      return assetsToUpload;
+    }
+
+    public Optional<Pair<String, String>> getExperimentIDWithEndpoint() {
       return experimentIDWithEndpoint;
     }
 
