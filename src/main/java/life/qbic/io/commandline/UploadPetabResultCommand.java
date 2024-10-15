@@ -11,20 +11,24 @@ import life.qbic.io.PetabParser;
 import life.qbic.model.download.OpenbisConnector;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
+import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 @Command(name = "upload-petab",
-    description = "uploads a PETab folder and attaches it to a provided experiment and any datasets referenced in the PETab metadata (e.g. for PETab results).")
+    description = "uploads a PETab folder and attaches it to a provided experiment and any datasets "
+        + "referenced in the PETab metadata (e.g. for PETab results).")
 public class UploadPetabResultCommand implements Runnable {
 
-  @Parameters(arity = "1", paramLabel = "file/folder", description = "The path to the file or folder to upload")
+  @Parameters(arity = "1", paramLabel = "file/folder", description = "The path to the file or folder "
+      + "to upload")
   private String dataPath;
-  @Parameters(arity = "1", paramLabel = "experiment ID", description = "The full identifier of the experiment the data should be attached to. "
+  @Parameters(arity = "1", paramLabel = "experiment ID", description = "The full identifier of the "
+      + "+experiment the data should be attached to. "
       + "The identifier must be of the format: /space/project/experiment")
   private String experimentID;
-  //@Option(arity = "1..*", paramLabel = "<parent_datasets>", description = "Optional list of dataset codes to act"
-  //    + " as parents for the upload. E.g. when this dataset has been generated using these datasets as input.", names = {"-pa", "--parents"})
-  private List<String> parents = new ArrayList<>();
+  @Option(arity = "1", paramLabel = "dataset type", description = "The openBIS dataset type code the "
+      + "data should be stored as. UNKNOWN if no type is chosen.", names = {"-t", "--type"})
+  private String datasetType = "UNKNOWN";
   @Mixin
   OpenbisAuthenticationOptions auth = new OpenbisAuthenticationOptions();
 
@@ -33,6 +37,8 @@ public class UploadPetabResultCommand implements Runnable {
 
     @Override
     public void run() {
+      App.readConfig();
+
       OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getOpenbisAS(), auth.getOpenbisDSS());
       openbis = new OpenbisConnector(authentication);
 
@@ -49,9 +55,9 @@ public class UploadPetabResultCommand implements Runnable {
         return;
       }
       System.out.println("Looking for reference datasets in metaInformation.yaml...");
-      parents = petabParser.parse(dataPath).getSourcePetabReferences();
+      List<String> parents = petabParser.parse(dataPath).getSourcePetabReferences();
       if(parents.isEmpty()) {
-        System.out.println("No reference datasets found in openBISSourceIds property. Assuming"
+        System.out.println("No reference datasets found in openBISSourceIds property. Assuming "
             + "this is a new dataset.");
       } else {
         System.out.println("Found reference ids: " + String.join(", ", parents));
@@ -63,7 +69,8 @@ public class UploadPetabResultCommand implements Runnable {
         }
       }
       System.out.println("Uploading dataset...");
-      DataSetPermId result = openbis.registerDatasetForExperiment(Path.of(dataPath), experimentID, parents);
+      DataSetPermId result = openbis.registerDatasetForExperiment(Path.of(dataPath), experimentID,
+          datasetType, parents);
       System.out.printf("Dataset %s was successfully created%n", result.getPermId());
     }
 
