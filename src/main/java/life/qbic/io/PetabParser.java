@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import life.qbic.model.petab.PetabMetadata;
 
 public class PetabParser {
@@ -94,4 +95,7 @@ public class PetabParser {
     return null;
   }
 
+  public void addPatientIDs(String outputPath, Set<String> patientIDs) {
+    System.err.println("found patient ids: "+patientIDs);
+  }
 }
