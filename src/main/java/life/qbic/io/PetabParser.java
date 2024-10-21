@@ -73,12 +73,22 @@ public class PetabParser {
     Path path = Paths.get(Objects.requireNonNull(findYaml(new File(outputPath))).getPath());
     Charset charset = StandardCharsets.UTF_8;
 
-    final String keyWord = "openBISId";
+    final String idKeyWord = "openBISId";
 
-    String idInLine = keyWord+":(.*)?(\\r\\n|[\\r\\n])";
+    final String endOfLine = ":(.*)?(\\r\\n|[\\r\\n])";
+    final String idInLine = idKeyWord+endOfLine;
 
     String content = Files.readString(path, charset);
-    content = content.replaceAll(idInLine, keyWord+": "+datasetCode+"\n");
+    // existing property found, fill/replace with relevant dataset code
+    if(content.contains(idKeyWord)) {
+      content = content.replaceAll(idInLine, idKeyWord+": "+datasetCode+"\n");
+      // no existing property found, create it above the dateOfExperiment property
+    } else {
+      String dateKeyword = "dateOfExperiment";
+      String dateLine = dateKeyword+endOfLine;
+      String newLines = idKeyWord+": "+datasetCode+"\n  "+dateKeyword+":\n";
+      content = content.replaceAll(dateLine, newLines);
+    }
     Files.write(path, content.getBytes(charset));
   }
 
