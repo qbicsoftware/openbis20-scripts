@@ -50,6 +50,7 @@ public class SEEKConnector {
   private byte[] credentials;
   private OpenbisSeekTranslator translator;
   private final String DEFAULT_PROJECT_ID;
+  private String currentStudy;
   private final List<String> ASSET_TYPES = new ArrayList<>(Arrays.asList("data_files", "models",
       "sops", "documents", "publications"));
 
@@ -75,7 +76,8 @@ public class SEEKConnector {
 
   public void setDefaultStudy(String studyTitle)
       throws URISyntaxException, IOException, InterruptedException {
-    translator.setDefaultStudy(searchNodeWithTitle("studies", studyTitle));
+    this.currentStudy = searchNodeWithTitle("studies", studyTitle);
+    translator.setDefaultStudy(currentStudy);
   }
 
   /**
@@ -136,8 +138,6 @@ public class SEEKConnector {
     HttpResponse<String> response = HttpClient.newBuilder().build()
         .send(buildAuthorizedPOSTRequest(endpoint, assay.toJson()),
             BodyHandlers.ofString());
-
-    System.err.println(assay.toJson());
 
     if(response.statusCode()!=200) {
       throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
@@ -502,18 +502,24 @@ public class SEEKConnector {
    * @throws IOException
    * @throws InterruptedException
    */
-  public List<String> searchAssaysContainingKeyword(String searchTerm)
+  public List<String> searchAssaysInStudyContainingKeyword(String searchTerm)
       throws URISyntaxException, IOException, InterruptedException {
 
     JsonNode result = genericSearch("assays", "*"+searchTerm+"*");
 
     JsonNode hits = result.path("data");
-    List<String> assayIDs = new ArrayList<>();
+    List<String> assayIDsInStudy = new ArrayList<>();
     for (Iterator<JsonNode> it = hits.elements(); it.hasNext(); ) {
       JsonNode hit = it.next();
-      assayIDs.add(hit.get("id").asText());
+      String assayID = hit.get("id").asText();
+      JsonNode assayData = fetchAssayData(assayID).get("data");
+      JsonNode relationships = assayData.get("relationships");
+      String studyID = relationships.get("study").get("data").get("id").asText();
+      if(studyID.equals(currentStudy)) {
+        assayIDsInStudy.add(assayID);
+      }
     }
-    return assayIDs;
+    return assayIDsInStudy;
   }
 
   /**
@@ -558,8 +564,10 @@ public class SEEKConnector {
   /**
    * Updates information of an existing assay, its samples and attached assets. Missing samples and
    * assets are created, but nothing missing from the new structure is deleted from SEEK.
+   *
    * @param nodeWithChildren the translated Seek structure as it should be once the update is done
-   * @param assayID the assay id of the existing assay, that should be compared to the new structure
+   * @param assayID          the assay id of the existing assay, that should be compared to the new
+   *                         structure
    * @return information necessary to make post registration updates in openBIS and upload missing
    * data to newly created assets. In the case of the update use case, only newly created objects
    * will be contained in the return object.
@@ -587,9 +595,9 @@ public class SEEKConnector {
 
           boolean oldEmpty = oldValue == null || oldValue.toString().isEmpty();
           boolean newEmpty = newValue == null || newValue.toString().isEmpty();
-          if ((!oldEmpty && !newEmpty) && !newValue.equals(oldValue)) {
-            System.out.printf("Mismatch found in attributes of %s. Sample will be updated.%n",
-                openBisID);
+          if ((!oldEmpty && !newEmpty) && !newValue.toString().equals(oldValue.toString())) {
+            System.out.printf("Mismatch found in %s attribute of %s. Sample will be updated.%n",
+                key, openBisID);
             newSample.setAssayIDs(List.of(assayID));
             updateSample(newSample, existingSample.getSeekID());
           }
@@ -842,6 +850,7 @@ public class SEEKConnector {
 
     Pair<ISAAssay, String> assayIDPair = nodeWithChildren.getAssayWithOpenBISReference().get();
 
+    System.out.println("Creating assay...");
     String assayID = addAssay(assayIDPair.getKey());
     String assayEndpoint = apiURL+"/assays/"+assayID;
     Pair<String, String> experimentIDWithEndpoint =
@@ -852,6 +861,9 @@ public class SEEKConnector {
 
     Map<String, String> sampleIDsWithEndpoints = new HashMap<>();
     Map<ISASample, String> samplesWithReferences = nodeWithChildren.getSamplesWithOpenBISReference();
+    if(!samplesWithReferences.isEmpty()) {
+      System.out.println("Creating samples...");
+    }
     for(ISASample sample : samplesWithReferences.keySet()) {
       sample.setAssayIDs(Collections.singletonList(assayID));
       String sampleEndpoint = createSample(sample);
@@ -859,6 +871,10 @@ public class SEEKConnector {
     }
 
     Map<GenericSeekAsset, DataSetFile> isaToFileMap = nodeWithChildren.getISAFileToDatasetFiles();
+
+    if(!isaToFileMap.isEmpty()) {
+      System.out.println("Creating assets...");
+    }
 
     List<AssetToUpload> assetsToUpload = createAssetsForAssays(isaToFileMap,
         Collections.singletonList(assayID));

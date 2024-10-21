@@ -21,6 +21,7 @@ import life.qbic.App;
 import life.qbic.model.OpenbisExperimentWithDescendants;
 import life.qbic.model.OpenbisSeekTranslator;
 import life.qbic.model.download.SEEKConnector.SeekStructurePostRegistrationInformation;
+import life.qbic.model.isa.NodeType;
 import life.qbic.model.isa.SeekStructure;
 import life.qbic.model.download.OpenbisConnector;
 import life.qbic.model.download.SEEKConnector;
@@ -88,7 +89,7 @@ public class TransferDataToSeekCommand implements Runnable {
       System.out.printf("No SEEK project title provided, will search config file.%n");
     }
     System.out.printf("Transfer datasets to SEEK? %s%n", transferData);
-    System.out.printf("Update existing assay if found? %s%n", !noUpdate);
+    System.out.printf("Update existing nodes if found? %s%n", !noUpdate);
     if(blacklistFile!=null && !blacklistFile.isBlank()) {
       System.out.printf("File with datasets codes that won't be transferred: %s%n", blacklistFile);
     }
@@ -100,28 +101,20 @@ public class TransferDataToSeekCommand implements Runnable {
 
     this.openbis = new OpenbisConnector(authentication);
 
-    boolean isSample = false;
-    boolean isDataSet = false;
-
     System.out.println("Searching for specified object in openBIS...");
 
     boolean isExperiment = experimentExists(objectID);
-
-    if (isExperiment && (studyTitle == null || studyTitle.isBlank())) {
-      System.out.printf(
-          "No SEEK study title was provided. This is mandatory if an openBIS experiment is to be transferred%n");
-      return;
-    }
+    NodeType nodeType = NodeType.ASSAY;
 
     if (!isExperiment && sampleExists(objectID)) {
-      isSample = true;
+      nodeType = NodeType.SAMPLE;
     }
 
-    if (!isExperiment && !isSample && datasetsExist(Arrays.asList(objectID))) {
-      isDataSet = true;
+    if (!isExperiment && !nodeType.equals(NodeType.SAMPLE) && datasetsExist(Arrays.asList(objectID))) {
+      nodeType = NodeType.ASSET;
     }
 
-    if (!isSample && !isExperiment && !isDataSet) {
+    if (nodeType.equals(NodeType.ASSAY) && !isExperiment) {
       System.out.printf(
           "%s could not be found in openBIS. Make sure you either specify an experiment, sample or dataset%n",
           objectID);
@@ -150,16 +143,20 @@ public class TransferDataToSeekCommand implements Runnable {
     OpenbisExperimentWithDescendants structure;
     try {
       System.out.println("Collecting information from openBIS...");
-      if (isExperiment) {
-        structure = openbis.getExperimentWithDescendants(objectID);
-        postRegInfo = handleExperimentTransfer(structure);
-      } else if (isSample) {
-        structure = openbis.getExperimentAndDataFromSample(objectID);
-        postRegInfo = handleExperimentTransfer(structure);
-      } else {
-        structure = openbis.getExperimentStructureFromDataset(objectID);
-        postRegInfo = handleExperimentTransfer(structure);
+      switch (nodeType) {
+        case ASSAY:
+          structure = openbis.getExperimentWithDescendants(objectID);
+          break;
+        case SAMPLE:
+          structure = openbis.getExperimentAndDataFromSample(objectID);
+          break;
+        case ASSET:
+          structure = openbis.getExperimentStructureFromDataset(objectID);
+          break;
+        default:
+          throw new RuntimeException("Handling of node type " + nodeType + " is not supported.");
       }
+      postRegInfo = handleExperimentTransfer(structure, nodeType);
     } catch (URISyntaxException | IOException | InterruptedException e) {
       throw new RuntimeException(e);
     }
@@ -171,7 +168,7 @@ public class TransferDataToSeekCommand implements Runnable {
   }
 
   private SeekStructurePostRegistrationInformation handleExperimentTransfer(
-      OpenbisExperimentWithDescendants experiment)
+      OpenbisExperimentWithDescendants experiment, NodeType nodeType)
       throws URISyntaxException, IOException, InterruptedException {
     Set<String> blacklist = parseBlackList(blacklistFile);
     System.out.println("Translating openBIS property codes to SEEK names...");
@@ -302,8 +299,9 @@ public class TransferDataToSeekCommand implements Runnable {
     }
   }
 
-  private SeekStructurePostRegistrationInformation updateAssayStructure(SeekStructure nodeWithChildren,
-      String assayID) throws URISyntaxException, IOException, InterruptedException {
+  private SeekStructurePostRegistrationInformation updateAssayStructure(
+      SeekStructure nodeWithChildren, String assayID) throws URISyntaxException,
+      IOException, InterruptedException {
     SeekStructurePostRegistrationInformation postRegInfo = seek.updateAssayNode(nodeWithChildren,
         assayID);
     List<AssetToUpload> assetsToUpload = postRegInfo.getAssetsToUpload();
@@ -381,7 +379,7 @@ public class TransferDataToSeekCommand implements Runnable {
     // because if a perm id is found in the wrong SEEK node, meta-information in SEEK could be
     // overwritten or samples/data added to the wrong assay.
     String permID = experiment.getPermId().getPermId();
-    List<String> assayIDs = seek.searchAssaysContainingKeyword(permID);
+    List<String> assayIDs = seek.searchAssaysInStudyContainingKeyword(permID);
     if(assayIDs.isEmpty()) {
       return Optional.empty();
     }

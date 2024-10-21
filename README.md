@@ -263,6 +263,16 @@ The data itself can be transferred and stored in SEEK using the '-d' flag.
 To completely exclude some dataset information from being transferred, a file ('--blacklist') 
 containing dataset codes (from openBIS) can be specified. //TODO do this for samples/sample types
 
+In order to store links to the newly created SEEK objects in the source openBIS instance, the 
+following sample type is needed:
+
+    Sample Type Code: EXTERNAL_LINK
+    Property: LINK_TYPE (VARCHAR)
+    Property: URL (VARCHAR)
+
+EXTERNAL_LINK samples are added to transferred experiments and samples and point to their respective
+counterparts in SEEK. If the sample type is not available, this will be logged.
+
 ### Updating nodes in SEEK based on updates in openBIS
 
 Updating nodes in SEEK uses the same general command, parameters and options. Unless otherwise 
@@ -278,5 +288,30 @@ attached to the assay in question
 least one sample attribute is different in openBIS and SEEK
 4. assets attached to the experiment or samples will be created, if they are missing from this assay
 5. no existing sample or assets are deleted from SEEK, even if they are missing from openBIS
+
+**Example command:**
+
+`java -jar target/openbis-scripts-1.0.0-jar-with-dependencies.jar openbis-to-seek /MYSPACE/PROJECTY/00_P_INFO_691 mystudy -d -config config.txt --openbis-pw --seek-pw`
+
+**Example output:**
+
+    Transfer openBIS -> SEEK started.
+    Provided openBIS object: /MYSPACE/PROJECTY/00_P_INFO_691
+    Provided SEEK study title: mystudy
+    No SEEK project title provided, will search config file.
+    Transfer datasets to SEEK? true
+    Update existing nodes if found? true
+    Connecting to openBIS...
+    Searching for specified object in openBIS...
+    Search successful.
+    Connecting to SEEK...
+    Collecting information from openBIS...
+    Translating openBIS property codes to SEEK names...
+    Creating SEEK structure...
+    Trying to find existing corresponding assay in SEEK...
+    Found assay with id 64
+    Updating nodes...
+    Mismatch found in Gender attribute of /MYSPACE/PROJECTY/00_P_INFO_691. Sample will be updated.
+    http://localhost:3000/assays/64 was successfully updated.
 
 ## Caveats and Future Options

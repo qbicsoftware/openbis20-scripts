@@ -25,13 +25,15 @@ import picocli.CommandLine.Parameters;
  * otherwise the type "UNKNOWN" will be used.
  */
 @Command(name = "upload-data",
-    description = "uploads a dataset and attaches it to an experiment and (optionally) other datasets")
+    description = "uploads a dataset and attaches it to an experiment or sample and (optionally) "
+        + "other datasets")
 public class UploadDatasetCommand implements Runnable {
 
   @Parameters(arity = "1", paramLabel = "file/folder", description = "The path to the file or folder to upload")
   private String dataPath;
-  @Parameters(arity = "1", paramLabel = "object ID", description = "The full identifier of the experiment or sample the data should be attached to. "
-      + "The identifier must be of the format: /space/project/experiment for experiments or /space/sample for samples")
+  @Parameters(arity = "1", paramLabel = "object ID", description = "The full identifier of the "
+      + "experiment or sample the data should be attached to. The identifier must be of the format: "
+      + "/space/project/experiment for experiments or /space/sample for samples")
   private String objectID;
   @Option(arity = "1..*", paramLabel = "<parent_datasets>", description = "Optional list of dataset codes to act"
       + " as parents for the upload. E.g. when this dataset has been generated using these datasets as input.", names = {"-pa", "--parents"})
