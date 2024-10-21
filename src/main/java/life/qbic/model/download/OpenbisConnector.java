@@ -3,9 +3,12 @@ package life.qbic.model.download;
 import ch.ethz.sis.openbis.generic.OpenBIS;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.common.search.SearchResult;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.DataSet;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.DataSetType;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.fetchoptions.DataSetFetchOptions;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.fetchoptions.DataSetTypeFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.id.DataSetPermId;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.search.DataSetSearchCriteria;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.search.DataSetTypeSearchCriteria;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.update.DataSetUpdate;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.entitytype.EntityKind;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.entitytype.id.EntityTypePermId;
@@ -51,11 +54,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import life.qbic.model.DatasetWithProperties;
 import life.qbic.model.OpenbisExperimentWithDescendants;
-import life.qbic.model.OpenbisSampleWithDatasets;
 import life.qbic.model.SampleTypeConnection;
 import life.qbic.model.SampleTypesAndMaterials;
 import life.qbic.model.download.SEEKConnector.SeekStructurePostRegistrationInformation;
-import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -109,6 +110,10 @@ public class OpenbisConnector {
 
   private UploadedDataSetCreation prepareDataSetCreation(Path uploadPath, String datasetType,
       List<String> parentCodes) {
+    if(listDatasetTypes().stream().map(DataSetType::getCode).noneMatch(x -> x.equals(datasetType))) {
+      throw new RuntimeException("Dataset type " + datasetType +
+          " is not supported by this instance of openBIS.");
+    }
     final String uploadId = openBIS.uploadFileWorkspaceDSS(uploadPath);
 
     final UploadedDataSetCreation creation = new UploadedDataSetCreation();
@@ -494,6 +499,14 @@ public class OpenbisConnector {
     return result.getObjects();
   }
 
+  public List<DataSetType> listDatasetTypes() {
+    DataSetTypeSearchCriteria criteria = new DataSetTypeSearchCriteria();
+    DataSetTypeFetchOptions fetchOptions = new DataSetTypeFetchOptions();
+    fetchOptions.withPropertyAssignments().withPropertyType();
+    fetchOptions.withPropertyAssignments().withEntityType();
+    return openBIS.searchDataSetTypes(criteria, fetchOptions).getObjects();
+  }
+
   public SampleTypesAndMaterials getSampleTypesWithMaterials() {
     SampleTypeSearchCriteria criteria = new SampleTypeSearchCriteria();
     SampleTypeFetchOptions typeOptions = new SampleTypeFetchOptions();
@@ -585,26 +598,27 @@ public class OpenbisConnector {
       boolean overwrite) {
     DataSetUpdate update = new DataSetUpdate();
     update.setDataSetId(id);
-    if(overwrite) {
+    if (overwrite) {
       update.setProperties(properties);
     } else {
       DataSetFetchOptions options = new DataSetFetchOptions();
       options.withProperties();
       DataSet oldDataset = openBIS.getDataSets(Arrays.asList(id), options).get(id);
-      for(String property : properties.keySet()) {
+      for (String property : properties.keySet()) {
         String newValue = properties.get(property);
         String oldValue = oldDataset.getProperty(property);
-        if(oldValue == null || oldValue.isEmpty() || oldValue.equals(newValue)) {
+        if (oldValue == null || oldValue.isEmpty() || oldValue.equals(newValue)) {
           update.setProperty(property, newValue);
         } else {
-          update.setProperty(property, oldValue+", "+newValue);//TODO this can be changed to any other strategy
+          update.setProperty(property,
+              oldValue + ", " + newValue);//TODO this can be changed to any other strategy
         }
       }
     }
     openBIS.updateDataSets(Arrays.asList(update));
   }
 
-  public OpenbisSampleWithDatasets getSampleWithDatasets(String sampleID) {
+  public OpenbisExperimentWithDescendants getExperimentAndDataFromSample(String sampleID) {
     SampleSearchCriteria criteria = new SampleSearchCriteria();
     criteria.withIdentifier().thatEquals(sampleID);
 
@@ -615,29 +629,61 @@ public class OpenbisConnector {
     fetchOptions.withProperties();
     fetchOptions.withType().withPropertyAssignments().withPropertyType();
     fetchOptions.withDataSetsUsing(dataSetFetchOptions);
-    fetchOptions.withDataSetsUsing(dataSetFetchOptions);
 
-    Sample sample = openBIS.searchSamples(criteria, fetchOptions).getObjects().get(0);
+    ExperimentFetchOptions expFetchOptions = new ExperimentFetchOptions();
+    expFetchOptions.withType();
+    expFetchOptions.withProject();
+    expFetchOptions.withProperties();
+    fetchOptions.withExperimentUsing(expFetchOptions);
+
+    List<Sample> samples = openBIS.searchSamples(criteria, fetchOptions).getObjects();
+    Sample sample = samples.get(0);
 
     List<DatasetWithProperties> datasets = new ArrayList<>();
     Map<String, List<DataSetFile>> datasetCodeToFiles = new HashMap<>();
-    for(DataSet dataset : sample.getDataSets()) {
+    for (DataSet dataset : sample.getDataSets()) {
       datasets.add(new DatasetWithProperties(dataset));
       datasetCodeToFiles.put(dataset.getPermId().getPermId(), getDatasetFiles(dataset));
     }
-
-    return new OpenbisSampleWithDatasets(sample, datasets, datasetCodeToFiles);
+    return new OpenbisExperimentWithDescendants(sample.getExperiment(), samples, datasets,
+        datasetCodeToFiles);
   }
 
-  public Pair<DatasetWithProperties, List<DataSetFile>> getDataSetWithFiles(String datasetID) {
+  public OpenbisExperimentWithDescendants getExperimentStructureFromDataset(String datasetID) {
     DataSetSearchCriteria criteria = new DataSetSearchCriteria();
     criteria.withPermId().thatEquals(datasetID);
+
+    SampleFetchOptions sampleFetchOptions = new SampleFetchOptions();
+    sampleFetchOptions.withProperties();
+    sampleFetchOptions.withType().withPropertyAssignments().withPropertyType();
+
+    ExperimentFetchOptions expFetchOptions = new ExperimentFetchOptions();
+    expFetchOptions.withType();
+    expFetchOptions.withProject();
+    expFetchOptions.withProperties();
 
     DataSetFetchOptions dataSetFetchOptions = new DataSetFetchOptions();
     dataSetFetchOptions.withType();
     dataSetFetchOptions.withRegistrator();
+    dataSetFetchOptions.withSampleUsing(sampleFetchOptions);
+    dataSetFetchOptions.withExperimentUsing(expFetchOptions);
 
     DataSet dataset = openBIS.searchDataSets(criteria, dataSetFetchOptions).getObjects().get(0);
-    return new ImmutablePair<>(new DatasetWithProperties(dataset), getDatasetFiles(dataset));
+
+    List<Sample> samples = new ArrayList<>();
+    if(dataset.getSample() != null) {
+      samples.add(dataset.getSample());
+    }
+
+    List<DatasetWithProperties> datasets = new ArrayList<>();
+    Map<String, List<DataSetFile>> datasetCodeToFiles = new HashMap<>();
+    datasets.add(new DatasetWithProperties(dataset));
+    datasetCodeToFiles.put(dataset.getPermId().getPermId(), getDatasetFiles(dataset));
+
+    if(dataset.getExperiment() == null) {
+      System.err.println("No experiment found for dataset "+datasetID);
+    }
+    return new OpenbisExperimentWithDescendants(dataset.getExperiment(), samples, datasets,
+        datasetCodeToFiles);
   }
 }
