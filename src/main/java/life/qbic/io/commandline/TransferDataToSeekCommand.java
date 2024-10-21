@@ -48,8 +48,8 @@ public class TransferDataToSeekCommand implements Runnable {
   @Parameters(arity = "1", paramLabel = "openbis id", description = "The identifier of the "
       + "experiment, sample or dataset to transfer.")
   private String objectID;
-  @Option(names = "--seek-study", description = "Title of the study in SEEK where nodes should be "
-      + "added. Mandatory for assay creation.")
+  @Parameters(arity = "1", paramLabel = "seek-study", description = "Title of the study in SEEK where "
+      + "nodes should be added. Mandatory, as an assay is always needed and attached to a study.")
   private String studyTitle;
   @Option(names = "--seek-project", description = "Title of the project in SEEK where nodes should"
       + "be added. Can alternatively be provided via the config file as 'seek_default_project'.")
