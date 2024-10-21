@@ -18,7 +18,7 @@ import life.qbic.model.petab.PetabMetadata;
 
 public class PetabParser {
 
-  private final String META_INFO_YAML = "metaInformation.yaml";
+  private final String META_INFO_YAML_NAME = "metaInformation";
 
   public PetabMetadata parse(String dataPath) {
 
@@ -84,14 +84,15 @@ public class PetabParser {
 
   private File findYaml(File directory) {
     for (File file : Objects.requireNonNull(directory.listFiles())) {
-      if (file.isFile() && file.getName().equalsIgnoreCase(META_INFO_YAML)) {
+      String fileName = file.getName();
+      if (file.isFile() && fileName.contains(META_INFO_YAML_NAME) && fileName.endsWith(".yaml")) {
         return file;
       }
       if (file.isDirectory()) {
         return findYaml(file);
       }
     }
-    System.out.println(META_INFO_YAML + " not found");
+    System.out.println(META_INFO_YAML_NAME + " yaml not found.");
     return null;
   }
 
