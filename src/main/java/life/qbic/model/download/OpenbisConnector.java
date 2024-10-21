@@ -19,6 +19,7 @@ import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.search.ExperimentSear
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.update.ExperimentUpdate;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.SampleType;
+import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.create.SampleCreation;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.fetchoptions.SampleFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.fetchoptions.SampleTypeFetchOptions;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.id.SampleIdentifier;
@@ -536,13 +537,49 @@ public class OpenbisConnector {
 
   public void createSeekLinks(SeekStructurePostRegistrationInformation postRegInformation) {
     Optional<Pair<String, String>> experimentInfo = postRegInformation.getExperimentIDWithEndpoint();
+    //TODO link sample type not implemented?
+    final String SAMPLE_TYPE = "EXTERNAL_LINK";
+
+    SampleTypeSearchCriteria criteria = new SampleTypeSearchCriteria();
+    criteria.withCode().thatEquals(SAMPLE_TYPE);
+    SampleTypeFetchOptions typeOptions = new SampleTypeFetchOptions();
+    typeOptions.withPropertyAssignments().withPropertyType();
+    typeOptions.withPropertyAssignments().withEntityType();
+    if(openBIS.searchSampleTypes(criteria, typeOptions).getObjects().size() == 0) {
+      System.out.printf(
+          "This is where links would be put into openBIS, but EXTERNAL_LINK sample was "
+              + "not yet added to openBIS instance.%n");
+      return;
+    }
+
     if(experimentInfo.isPresent()) {
       ExperimentIdentifier id = new ExperimentIdentifier(experimentInfo.get().getLeft());
       String endpoint = experimentInfo.get().getRight();
-      Map<String, String> props = new HashMap<>();
-      props.put(EXPERIMENT_LINK_PROPERTY, endpoint);
-      updateExperimentProperties(id, props, false);
+      SampleCreation sample = createNewLinkSample(endpoint);
+      sample.setExperimentId(id);
+      openBIS.createSamples(Arrays.asList(sample));
     }
+    Map<String, String> sampleInfos = postRegInformation.getSampleIDsWithEndpoints();
+    for(String sampleID : sampleInfos.keySet()) {
+      SampleIdentifier id = new SampleIdentifier(sampleID);
+      String endpoint = sampleInfos.get(sampleID);
+      SampleCreation sample = createNewLinkSample(endpoint);
+      sample.setParentIds(Arrays.asList(id));
+      openBIS.createSamples(Arrays.asList(sample));
+    }
+  }
+
+  private SampleCreation createNewLinkSample(String endpoint) {
+    final String SAMPLE_TYPE = "EXTERNAL_LINK";
+    SampleCreation sample = new SampleCreation();
+    sample.setTypeId(new EntityTypePermId(SAMPLE_TYPE, EntityKind.SAMPLE));
+
+    Map<String, String> properties = new HashMap<>();
+    properties.put("LINK_TYPE", "SEEK");
+    properties.put("URL", endpoint);
+
+    sample.setProperties(properties);
+    return sample;
   }
 
   public void updateSeekLinks(SeekStructurePostRegistrationInformation postRegistrationInformation) {
