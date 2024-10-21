@@ -545,7 +545,7 @@ public class OpenbisConnector {
     SampleTypeFetchOptions typeOptions = new SampleTypeFetchOptions();
     typeOptions.withPropertyAssignments().withPropertyType();
     typeOptions.withPropertyAssignments().withEntityType();
-    if(openBIS.searchSampleTypes(criteria, typeOptions).getObjects().size() == 0) {
+    if(openBIS.searchSampleTypes(criteria, typeOptions).getObjects().isEmpty()) {
       System.out.printf(
           "This is where links would be put into openBIS, but EXTERNAL_LINK sample was "
               + "not yet added to openBIS instance.%n");

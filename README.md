@@ -263,6 +263,16 @@ The data itself can be transferred and stored in SEEK using the '-d' flag.
 To completely exclude some dataset information from being transferred, a file ('--blacklist') 
 containing dataset codes (from openBIS) can be specified. //TODO do this for samples/sample types
 
+In order to store links to the newly created SEEK objects in the source openBIS instance, the 
+following sample type is needed:
+
+    Sample Type Code: EXTERNAL_LINK
+    Property: LINK_TYPE (VARCHAR)
+    Property: URL (VARCHAR)
+
+EXTERNAL_LINK samples are added to transferred experiments and samples and point to their respective
+counterparts in SEEK. If the sample type is not available, this will be logged.
+
 ### Updating nodes in SEEK based on updates in openBIS
 
 Updating nodes in SEEK uses the same general command, parameters and options. Unless otherwise 
