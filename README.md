@@ -279,4 +279,29 @@ least one sample attribute is different in openBIS and SEEK
 4. assets attached to the experiment or samples will be created, if they are missing from this assay
 5. no existing sample or assets are deleted from SEEK, even if they are missing from openBIS
 
+**Example command:**
+
+`java -jar target/openbis-scripts-1.0.0-jar-with-dependencies.jar openbis-to-seek /MYSPACE/PROJECTY/00_P_INFO_691 mystudy -d -config config.txt --openbis-pw --seek-pw`
+
+**Example output:**
+
+    Transfer openBIS -> SEEK started.
+    Provided openBIS object: /MYSPACE/PROJECTY/00_P_INFO_691
+    Provided SEEK study title: mystudy
+    No SEEK project title provided, will search config file.
+    Transfer datasets to SEEK? true
+    Update existing nodes if found? true
+    Connecting to openBIS...
+    Searching for specified object in openBIS...
+    Search successful.
+    Connecting to SEEK...
+    Collecting information from openBIS...
+    Translating openBIS property codes to SEEK names...
+    Creating SEEK structure...
+    Trying to find existing corresponding assay in SEEK...
+    Found assay with id 64
+    Updating nodes...
+    Mismatch found in Gender attribute of /MYSPACE/PROJECTY/00_P_INFO_691. Sample will be updated.
+    http://localhost:3000/assays/64 was successfully updated.
+
 ## Caveats and Future Options
