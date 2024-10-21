@@ -3,7 +3,6 @@ package life.qbic.io.commandline;
 import ch.ethz.sis.openbis.generic.OpenBIS;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.experiment.Experiment;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.sample.Sample;
-import ch.ethz.sis.openbis.generic.dssapi.v3.dto.datasetfile.DataSetFile;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -19,18 +18,14 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.xml.parsers.ParserConfigurationException;
 import life.qbic.App;
-import life.qbic.model.DatasetWithProperties;
 import life.qbic.model.OpenbisExperimentWithDescendants;
-import life.qbic.model.OpenbisSampleWithDatasets;
 import life.qbic.model.OpenbisSeekTranslator;
 import life.qbic.model.download.SEEKConnector.SeekStructurePostRegistrationInformation;
-import life.qbic.model.isa.GenericSeekAsset;
 import life.qbic.model.isa.SeekStructure;
 import life.qbic.model.download.OpenbisConnector;
 import life.qbic.model.download.SEEKConnector;
 import life.qbic.model.download.SEEKConnector.AssetToUpload;
 import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.lang3.tuple.Pair;
 import org.xml.sax.SAXException;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
@@ -152,13 +147,18 @@ public class TransferDataToSeekCommand implements Runnable {
       throw new RuntimeException(e);
     }
     SeekStructurePostRegistrationInformation postRegInfo;
+    OpenbisExperimentWithDescendants structure;
     try {
+      System.out.println("Collecting information from openBIS...");
       if (isExperiment) {
-        postRegInfo = handleExperimentTransfer();
+        structure = openbis.getExperimentWithDescendants(objectID);
+        postRegInfo = handleExperimentTransfer(structure);
       } else if (isSample) {
-        postRegInfo = handleSampleTransfer();
+        structure = openbis.getExperimentAndDataFromSample(objectID);
+        postRegInfo = handleExperimentTransfer(structure);
       } else {
-        postRegInfo = handleDatasetTransfer();
+        structure = openbis.getExperimentStructureFromDataset(objectID);
+        postRegInfo = handleExperimentTransfer(structure);
       }
     } catch (URISyntaxException | IOException | InterruptedException e) {
       throw new RuntimeException(e);
@@ -170,10 +170,9 @@ public class TransferDataToSeekCommand implements Runnable {
     System.out.println("Done");
   }
 
-  private SeekStructurePostRegistrationInformation handleExperimentTransfer()
+  private SeekStructurePostRegistrationInformation handleExperimentTransfer(
+      OpenbisExperimentWithDescendants experiment)
       throws URISyntaxException, IOException, InterruptedException {
-    System.out.println("Collecting information from openBIS...");
-    OpenbisExperimentWithDescendants experiment = openbis.getExperimentWithDescendants(objectID);
     Set<String> blacklist = parseBlackList(blacklistFile);
     System.out.println("Translating openBIS property codes to SEEK names...");
     Map<String, String> sampleTypesToIds = seek.getSampleTypeNamesToIDs();
@@ -196,10 +195,10 @@ public class TransferDataToSeekCommand implements Runnable {
     return createNewAssayStructure(nodeWithChildren);
   }
 
+  /*
   private SeekStructurePostRegistrationInformation handleSampleTransfer()
       throws URISyntaxException, IOException, InterruptedException {
     System.out.println("Collecting information from openBIS...");
-    OpenbisSampleWithDatasets sampleWithDatasets = openbis.getSampleWithDatasets(objectID);
     Set<String> blacklist = parseBlackList(blacklistFile);
     System.out.println("Translating openBIS property codes to SEEK names...");
     Map<String, String> sampleTypesToIds = seek.getSampleTypeNamesToIDs();
@@ -234,6 +233,7 @@ public class TransferDataToSeekCommand implements Runnable {
     System.out.println("Creating new asset(s)...");
     return createNewAssetsForDataset(nodeWithChildren.getISAFileToDatasetFiles());
   }
+
 
   private SeekStructurePostRegistrationInformation updateSampleStructure(
       SeekStructure nodeWithChildren, String sampleID)
@@ -276,6 +276,8 @@ public class TransferDataToSeekCommand implements Runnable {
     System.out.printf("Assets were successfully created.%n");
     return postRegistrationInformation;
   }
+
+   */
 
   private Set<String> parseBlackList(String blacklistFile) {
     if(blacklistFile == null) {

@@ -13,6 +13,17 @@ import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+/**
+ * The Upload Dataset command can be used to upload a Dataset to openBIS and connect it to existing
+ * datasets.
+ * To upload a dataset, the path to the file or folder and the object ID to which it should
+ * be attached need to be provided. Objects can be experiments or samples.
+ * Parent datasets can be specified using the --parents command.
+ * If the specified object ID or any of the specified parent datasets cannot be found, the script
+ * will stop and return an error message.
+ * The dataset type of the new dataset in openBIS can be specified using the --type option,
+ * otherwise the type "UNKNOWN" will be used.
+ */
 @Command(name = "upload-data",
     description = "uploads a dataset and attaches it to an experiment and (optionally) other datasets")
 public class UploadDatasetCommand implements Runnable {

@@ -882,6 +882,7 @@ public class SEEKConnector {
     return postRegInfo;
   }
 
+  /*
   public SeekStructurePostRegistrationInformation createSampleWithAssets(SeekStructure nodeWithChildren)
       throws URISyntaxException, IOException, InterruptedException {
    Map<String, String> sampleIDsWithEndpoints = new HashMap<>();
@@ -931,6 +932,8 @@ public class SEEKConnector {
     }
     return new SeekStructurePostRegistrationInformation(assetsToUpload, datasetIDsWithEndpoints);
   }
+
+   */
 
   public OpenbisSeekTranslator getTranslator() {
     return translator;
