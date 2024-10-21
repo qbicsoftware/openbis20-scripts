@@ -19,16 +19,22 @@ import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+/**
+ * List Data
+ * The list-data command can be used to list Datasets in openBIS and some of their metadata based
+ * on the experiment or sample they are attached to. Experiments or samples are specified by their
+ * openBIS code or identifier.
+ * The optional 'space' parameter can be used to only show datasets found in the provided space.
+ */
 @Command(name = "list-data",
     description = "lists datasets and their details for a given experiment code")
 public class FindDatasetsCommand implements Runnable {
 
-  @Parameters(arity = "1", paramLabel = "openBIS obejct", description =
-      "The code of the experiment "
-          + "or sample data is attached to.")
+  @Parameters(arity = "1", paramLabel = "openBIS object", description =
+      "The code of the experiment or sample data is attached to.")
   private String objectCode;
   @Option(arity = "1", paramLabel = "<space>", description = "Optional openBIS spaces to filter "
-      + "found datasets by", names = {"-s", "--space"})
+      + "found datasets by.", names = {"-s", "--space"})
   private String space;
   @Mixin
   OpenbisAuthenticationOptions auth = new OpenbisAuthenticationOptions();

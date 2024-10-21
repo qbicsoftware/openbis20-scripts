@@ -4,7 +4,6 @@ import ch.ethz.sis.openbis.generic.OpenBIS;
 import ch.ethz.sis.openbis.generic.asapi.v3.dto.dataset.id.DataSetPermId;
 import java.io.File;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import life.qbic.App;
 import life.qbic.io.PetabParser;
@@ -14,12 +13,29 @@ import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+/**
+ * The Upload PEtab command can be used to upload a PEtab Dataset to openBIS and connect it to its
+ * source files if these are stored in the same openBIS instance and referenced in the PEtabs meta-
+ * data.
+ * To upload a PEtab dataset, the path to the PEtab folder and the experiment ID to which it should
+ * be attached need to be provided.
+ * The dataset type of the new dataset in openBIS can be specified using the --type option,
+ * otherwise the type "UNKNOWN" will be used.
+ * The script will search the metaInformation.yaml for the entry "openBISSourceIds:" and attach the
+ * new dataset to all the datasets with ids in the following blocks found in this instance of
+ * openBIS:
+ *   openBISSourceIds:
+ *     - 20210702093837370-184137
+ *     - 20220702100912333-189138
+ * If one or more dataset identifiers are not found, the script will stop without uploading the data
+ * and inform the user.
+ */
 @Command(name = "upload-petab",
     description = "uploads a PETab folder and attaches it to a provided experiment and any datasets "
         + "referenced in the PETab metadata (e.g. for PETab results).")
 public class UploadPetabResultCommand implements Runnable {
 
-  @Parameters(arity = "1", paramLabel = "file/folder", description = "The path to the file or folder "
+  @Parameters(arity = "1", paramLabel = "PEtab folder", description = "The path to the PEtab folder "
       + "to upload")
   private String dataPath;
   @Parameters(arity = "1", paramLabel = "experiment ID", description = "The full identifier of the "
@@ -33,7 +49,7 @@ public class UploadPetabResultCommand implements Runnable {
   OpenbisAuthenticationOptions auth = new OpenbisAuthenticationOptions();
 
   private OpenbisConnector openbis;
-  private PetabParser petabParser = new PetabParser();
+  private final PetabParser petabParser = new PetabParser();
 
     @Override
     public void run() {
