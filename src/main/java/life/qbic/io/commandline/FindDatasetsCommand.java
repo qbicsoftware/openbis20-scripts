@@ -66,7 +66,7 @@ public class FindDatasetsCommand implements Runnable {
       List<DataSet> datasets = new ArrayList<>();
 
       if(!datasetsOfExp.isEmpty()) {
-        System.err.println("Found "+datasetsOfExp.size()+" datasets for experiment "+objectCode);
+        System.out.printf("Found %s datasets for experiment %s:%n", datasetsOfExp.size(), objectCode);
         datasets.addAll(datasetsOfExp);
       }
       List<DataSet> datasetsOfSample = openbis.listDatasetsOfSample(spaces, objectCode).stream()
@@ -75,7 +75,8 @@ public class FindDatasetsCommand implements Runnable {
             .collect(Collectors.toList());
 
       if(!datasetsOfSample.isEmpty()) {
-        System.err.println("Found "+datasetsOfSample.size()+" datasets for sample "+objectCode);
+        System.out.printf("Found %s datasets for sample %s:%n", datasetsOfSample.size(), objectCode);
+
         datasets.addAll(datasetsOfSample);
       }
 
@@ -95,8 +96,6 @@ public class FindDatasetsCommand implements Runnable {
         return ds;
       }).collect(Collectors.toList());
       int datasetIndex = 0;
-      System.out.println();
-      System.out.printf("Found %s datasets for %s:%n", datasets.size(), objectCode);
       for (DatasetWithProperties dataSet : datasetWithProperties) {
         datasetIndex++;
         System.out.println("["+datasetIndex+"]");
