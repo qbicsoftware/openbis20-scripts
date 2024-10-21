@@ -137,8 +137,6 @@ public class SEEKConnector {
         .send(buildAuthorizedPOSTRequest(endpoint, assay.toJson()),
             BodyHandlers.ofString());
 
-    System.err.println(assay.toJson());
-
     if(response.statusCode()!=200) {
       throw new RuntimeException("Failed : HTTP error code : " + response.statusCode());
     }
