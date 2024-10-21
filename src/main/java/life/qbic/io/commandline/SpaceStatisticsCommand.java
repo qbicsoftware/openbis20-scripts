@@ -24,16 +24,27 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 
+/**
+ * The Statistics command can be used to list the number of collections, sample objects and attached
+ * datasets by type for one or all spaces accessible by the user.
+ * The --space command can be used to only show the objects in a specific openBIS space.
+ * An output file for the resulting list can be specified using the --out command.
+ * By default, openBIS settings objects and material spaces are ignored. This can be overwritten
+ * using --show-settings.
+ */
 @Command(name = "statistics",
     description = "lists the number of collections, sample objects and attached datasets (by type)"
         + "for one or all spaces accessible by the user")
 public class SpaceStatisticsCommand implements Runnable {
 
-  @Option(arity = "1", paramLabel = "<space>", description = "optional openBIS spaces to filter samples", names = {"-s", "--space"})
+  @Option(arity = "1", paramLabel = "<space>", description = "optional openBIS space to filter "
+      + "samples", names = {"-s", "--space"})
   private String space;
-  @Option(arity = "1", paramLabel = "<output file path>", description = "optional output path", names = {"-o", "--out"})
+  @Option(arity = "1", paramLabel = "<output file path>", description = "optional output path",
+      names = {"-o", "--out"})
   private String outpath;
-  @Option(arity = "0", description = "shows results for openBIS settings and material spaces. Ignored if a specific space is selected.",
+  @Option(arity = "0", description = "shows results for openBIS settings and material spaces. "
+      + "Ignored if a specific space is selected.",
       names = {"--show-settings"})
   private boolean allSpaces;
   @Mixin

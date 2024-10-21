@@ -218,6 +218,7 @@ public class OpenbisSeekTranslator {
     return result;
   }
 
+  /*
   public SeekStructure translate(OpenbisSampleWithDatasets sampleWithDatasets,
       Map<String, String> sampleTypesToIds, Set<String> blacklist, boolean transferData) {
     Sample sample = sampleWithDatasets.getSample();
@@ -280,6 +281,8 @@ public class OpenbisSeekTranslator {
     }
     return new SeekStructure(assetToDatasetFiles);
   }
+
+   */
 
   private String getDatasetTypeOfFile(DataSetFile file, List<DatasetWithProperties> dataSets) {
     String permId = file.getDataSetPermId().getPermId();
