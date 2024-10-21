@@ -17,7 +17,7 @@ import picocli.CommandLine.Parameters;
  * The Upload PEtab command can be used to upload a PEtab Dataset to openBIS and connect it to its
  * source files if these are stored in the same openBIS instance and referenced in the PEtabs meta-
  * data.
- * To upload a PEtab dataset, the path to the PEtab folder and the experiment ID to which it should
+ * To upload a PEtab dataset, the path to the PEtab folder and the object ID to which it should
  * be attached need to be provided.
  * The dataset type of the new dataset in openBIS can be specified using the --type option,
  * otherwise the type "UNKNOWN" will be used.
@@ -38,10 +38,10 @@ public class UploadPetabResultCommand implements Runnable {
   @Parameters(arity = "1", paramLabel = "PEtab folder", description = "The path to the PEtab folder "
       + "to upload")
   private String dataPath;
-  @Parameters(arity = "1", paramLabel = "experiment ID", description = "The full identifier of the "
-      + "+experiment the data should be attached to. "
-      + "The identifier must be of the format: /space/project/experiment")
-  private String experimentID;
+  @Parameters(arity = "1", paramLabel = "object ID", description = "The full identifier of the "
+      + "experiment or sample the data should be attached to. The identifier must be of the format: "
+      + "/space/project/experiment for experiments or /space/sample for samples")
+  private String objectID;
   @Option(arity = "1", paramLabel = "dataset type", description = "The openBIS dataset type code the "
       + "data should be stored as. UNKNOWN if no type is chosen.", names = {"-t", "--type"})
   private String datasetType = "UNKNOWN";
@@ -55,7 +55,8 @@ public class UploadPetabResultCommand implements Runnable {
     public void run() {
       App.readConfig();
 
-      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(), auth.getOpenbisAS(), auth.getOpenbisDSS());
+      OpenBIS authentication = App.loginToOpenBIS(auth.getOpenbisPassword(), auth.getOpenbisUser(),
+          auth.getOpenbisAS(), auth.getOpenbisDSS());
       openbis = new OpenbisConnector(authentication);
 
       if(!pathValid(dataPath)) {
@@ -66,8 +67,13 @@ public class UploadPetabResultCommand implements Runnable {
         System.out.printf("%s is not a directory. Please specify the PETab directory root%n", dataPath);
         return;
       }
-      if(!experimentExists(experimentID)) {
-        System.out.printf("Experiment %s could not be found%n", experimentID);
+      boolean attachToSample = false;
+      boolean attachToExperiment = openbis.experimentExists(objectID);
+      if(openbis.sampleExists(objectID)) {
+        attachToSample = true;
+      }
+      if(!attachToSample && !attachToExperiment) {
+        System.out.printf("%s could not be found in openBIS.%n", objectID);
         return;
       }
       System.out.println("Looking for reference datasets in metaInformation.yaml...");
@@ -85,17 +91,19 @@ public class UploadPetabResultCommand implements Runnable {
         }
       }
       System.out.println("Uploading dataset...");
-      DataSetPermId result = openbis.registerDatasetForExperiment(Path.of(dataPath), experimentID,
-          datasetType, parents);
-      System.out.printf("Dataset %s was successfully created%n", result.getPermId());
+      if(attachToExperiment) {
+        DataSetPermId result = openbis.registerDatasetForExperiment(Path.of(dataPath), objectID,
+            datasetType, parents);
+        System.out.printf("Dataset %s was successfully attached to experiment%n", result.getPermId());
+      } else {
+        DataSetPermId result = openbis.registerDatasetForSample(Path.of(dataPath), objectID,
+            datasetType, parents);
+        System.out.printf("Dataset %s was successfully attached to sample%n", result.getPermId());
+      }
     }
 
   private boolean datasetsExist(List<String> datasetCodes) {
       return openbis.findDataSets(datasetCodes).size() == datasetCodes.size();
-  }
-
-  private boolean experimentExists(String experimentID) {
-      return openbis.experimentExists(experimentID);
   }
 
   private boolean pathValid(String dataPath) {
