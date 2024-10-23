@@ -10,7 +10,8 @@ import picocli.CommandLine.Option;
 @Command(name = "openbis-scripts",
     subcommands = {SampleHierarchyCommand.class, TransferSampleTypesToSeekCommand.class,
         DownloadPetabCommand.class, UploadPetabResultCommand.class, UploadDatasetCommand.class,
-        SpaceStatisticsCommand.class, TransferDataToSeekCommand.class, FindDatasetsCommand.class},
+        SpaceStatisticsCommand.class, TransferDataToSeekCommand.class, FindDatasetsCommand.class,
+        CreateROCrate.class},
     description = "A client software for querying openBIS.",
     mixinStandardHelpOptions = true, versionProvider = ManifestVersionProvider.class)
 public class CommandLineOptions {

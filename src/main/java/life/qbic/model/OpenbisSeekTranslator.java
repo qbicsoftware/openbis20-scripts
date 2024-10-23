@@ -32,7 +32,6 @@ import life.qbic.model.isa.ISASampleType;
 import life.qbic.model.isa.ISASampleType.SampleAttribute;
 import life.qbic.model.isa.ISASampleType.SampleAttributeType;
 import life.qbic.model.isa.SeekStructure;
-import org.apache.commons.lang3.tuple.Pair;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -58,6 +57,80 @@ public class OpenbisSeekTranslator {
       throw new RuntimeException("Script can not be run, since 'seek_openbis_sample_title' was not "
           + "provided.");
     }
+  }
+
+  /**
+   * Used for translation to RO-Crate, without SEEK connection
+   * @param openbisBaseURL
+   */
+  public OpenbisSeekTranslator(String openbisBaseURL)
+      throws IOException, ParserConfigurationException, SAXException {
+    this.openBISBaseURL = openbisBaseURL;
+    this.DEFAULT_PROJECT_ID = null;
+    parseConfigs();
+  }
+
+  //Used for translation to RO-Crate, without SEEK connection
+  public SeekStructure translateForRO(OpenbisExperimentWithDescendants experiment,
+      Set<String> blacklist, boolean transferData) throws URISyntaxException {
+
+    Experiment exp = experiment.getExperiment();
+    String expType = exp.getType().getCode();
+    String title = exp.getCode()+" ("+exp.getPermId().getPermId()+")";
+    String assayType = experimentTypeToAssayType.get(expType);
+
+    if(assayType ==null || assayType.isBlank()) {
+      throw new RuntimeException("Could not find assay type for " + expType+". A mapping needs to "
+          + "be added to the respective properties file.");
+    }
+    ISAAssay assay = new ISAAssay(title, "-1", experimentTypeToAssayClass.get(expType),
+        new URI(assayType));
+
+    SeekStructure result = new SeekStructure(assay, exp.getIdentifier().getIdentifier());
+
+    for(Sample sample : experiment.getSamples()) {
+      SampleType sampleType = sample.getType();
+
+      //try to put all attributes into sample properties, as they should be a 1:1 mapping
+      Map<String, String> typeCodesToNames = new HashMap<>();
+      Set<String> propertiesLinkingSamples = new HashSet<>();
+      for (PropertyAssignment a : sampleType.getPropertyAssignments()) {
+        String code = a.getPropertyType().getCode();
+        String label = a.getPropertyType().getLabel();
+        DataType type = a.getPropertyType().getDataType();
+        typeCodesToNames.put(code, label);
+        if(type.equals(DataType.SAMPLE)) {
+          propertiesLinkingSamples.add(code);
+        }
+      }
+      Map<String, Object> attributes = new HashMap<>();
+      for(String code : sample.getProperties().keySet()) {
+        String value = sample.getProperty(code);
+        if(propertiesLinkingSamples.contains(code)) {
+          value = generateOpenBISLinkFromPermID("SAMPLE", value);
+        }
+        attributes.put(typeCodesToNames.get(code), value);
+      }
+
+      String sampleID = sample.getIdentifier().getIdentifier();
+      attributes.put(App.configProperties.get("seek_openbis_sample_title"), sampleID);
+      ISASample isaSample = new ISASample(sample.getIdentifier().getIdentifier(), attributes,
+          "-1", Collections.singletonList(DEFAULT_PROJECT_ID));
+      result.addSample(isaSample, sampleID);
+    }
+
+    //create ISA files for assets. If actual data is to be uploaded is determined later based on flag
+    for(DatasetWithProperties dataset : experiment.getDatasets()) {
+      String permID = dataset.getCode();
+      if(!blacklist.contains(permID)) {
+        for(DataSetFile file : experiment.getFilesForDataset(permID)) {
+          String datasetType = getDatasetTypeOfFile(file, experiment.getDatasets());
+          datasetFileToSeekAsset(file, datasetType, transferData)
+              .ifPresent(seekAsset -> result.addAsset(seekAsset, file));
+        }
+      }
+    }
+    return result;
   }
 
   /**
@@ -217,72 +290,6 @@ public class OpenbisSeekTranslator {
     }
     return result;
   }
-
-  /*
-  public SeekStructure translate(OpenbisSampleWithDatasets sampleWithDatasets,
-      Map<String, String> sampleTypesToIds, Set<String> blacklist, boolean transferData) {
-    Sample sample = sampleWithDatasets.getSample();
-    SampleType sampleType = sample.getType();
-    //try to put all attributes into sample properties, as they should be a 1:1 mapping
-    Map<String, String> typeCodesToNames = new HashMap<>();
-    Set<String> propertiesLinkingSamples = new HashSet<>();
-    for (PropertyAssignment a : sampleType.getPropertyAssignments()) {
-      String code = a.getPropertyType().getCode();
-      String label = a.getPropertyType().getLabel();
-      DataType type = a.getPropertyType().getDataType();
-      typeCodesToNames.put(code, label);
-      if (type.equals(DataType.SAMPLE)) {
-        propertiesLinkingSamples.add(code);
-      }
-    }
-    Map<String, Object> attributes = new HashMap<>();
-    for (String code : sample.getProperties().keySet()) {
-      String value = sample.getProperty(code);
-      if (propertiesLinkingSamples.contains(code)) {
-        value = generateOpenBISLinkFromPermID("SAMPLE", value);
-      }
-      attributes.put(typeCodesToNames.get(code), value);
-    }
-
-    String sampleID = sample.getIdentifier().getIdentifier();
-    attributes.put(App.configProperties.get("seek_openbis_sample_title"), sampleID);
-    String sampleTypeId = sampleTypesToIds.get(sampleType.getCode());
-    ISASample isaSample = new ISASample(sample.getIdentifier().getIdentifier(), attributes,
-        sampleTypeId, Collections.singletonList(DEFAULT_PROJECT_ID));
-    SeekStructure result = new SeekStructure(isaSample, sampleID);
-
-    //create ISA files for assets. If actual data is to be uploaded is determined later based on flag
-    List<DatasetWithProperties> datasets = sampleWithDatasets.getDatasets();
-    for (DatasetWithProperties dataset : datasets) {
-      String permID = dataset.getCode();
-      if (!blacklist.contains(permID)) {
-        for (DataSetFile file : sampleWithDatasets.getFilesForDataset(permID)) {
-          String datasetType = getDatasetTypeOfFile(file, datasets);
-          datasetFileToSeekAsset(file, datasetType, transferData)
-              .ifPresent(seekAsset -> result.addAsset(seekAsset, file));
-        }
-      }
-    }
-    return result;
-  }
-
-  public SeekStructure translate(Pair<DatasetWithProperties, List<DataSetFile>> datasetWithFiles,
-      Set<String> blacklist, boolean transferData) {
-    Map<GenericSeekAsset, DataSetFile> assetToDatasetFiles = new HashMap<>();
-    DatasetWithProperties dataset = datasetWithFiles.getLeft();
-    String permID = dataset.getCode();
-    String datasetType = dataset.getType().getCode();
-
-    if (!blacklist.contains(permID)) {
-      for (DataSetFile file : datasetWithFiles.getRight()) {
-        datasetFileToSeekAsset(file, datasetType, transferData)
-            .ifPresent(seekAsset -> assetToDatasetFiles.put(seekAsset, file));
-      }
-    }
-    return new SeekStructure(assetToDatasetFiles);
-  }
-
-   */
 
   private String getDatasetTypeOfFile(DataSetFile file, List<DatasetWithProperties> dataSets) {
     String permId = file.getDataSetPermId().getPermId();
