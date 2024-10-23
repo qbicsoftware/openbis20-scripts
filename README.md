@@ -323,8 +323,12 @@ parameters need to be provided (there will be no references to existing study or
 SEEK).
 
 The script will try to find the provided **openbis ID** in experiments, samples or datasets and
-fetch any missing information to create a folder structure containing at least one assay (when an
-experiment without samples and datasets is specified).
+fetch any missing information to create a folder structure in the provided **ro-path** containing at
+least one assay's information (when an experiment without samples and datasets is specified).
+
+Assets (files and their ISA metadata) are stored in a folder named like the openBIS dataset code
+they are part of, which is either the subfolder of the experiment (assay), or the subfolder of a
+sample, depending on where the dataset was attached in openBIS.
 
 Info in the created asset .jsons always links back to the openBIS path of the respective dataset.
 The data itself can be downloaded into the structure using the '-d' flag.
@@ -358,6 +362,7 @@ containing dataset codes (from openBIS) can be specified. //TODO do this for sam
     Downloading dataset file to asset folder.
     Writing asset json for file in dataset 20241021191109163-689109.
     Downloading dataset file to asset folder.
+    ...
 
 **Creates structure:**
 
