@@ -645,11 +645,8 @@ public class SEEKConnector {
     }
 
     String assayEndpoint = apiURL + "/assays/" + assayID;
-    if(nodeWithChildren.getAssayWithOpenBISReference().isEmpty()) {
-        throw new RuntimeException("No assay and openBIS reference found. Object has not been "
-            + "initialized using an assay object and openBIS experiment reference.");
-    }
-    String expID = nodeWithChildren.getAssayWithOpenBISReference().get().getRight();
+
+    String expID = nodeWithChildren.getAssayWithOpenBISReference().getRight();
     Pair<String, String> experimentIDWithEndpoint = new ImmutablePair<>(expID, assayEndpoint);
 
     SeekStructurePostRegistrationInformation postRegInfo =
@@ -842,13 +839,7 @@ public class SEEKConnector {
 
   public SeekStructurePostRegistrationInformation createNode(SeekStructure nodeWithChildren)
       throws URISyntaxException, IOException, InterruptedException {
-
-    if(nodeWithChildren.getAssayWithOpenBISReference().isEmpty()) {
-        throw new RuntimeException("No assay and openBIS reference found. Object has not been "
-            + "initialized using an assay object and openBIS experiment reference.");
-    }
-
-    Pair<ISAAssay, String> assayIDPair = nodeWithChildren.getAssayWithOpenBISReference().get();
+    Pair<ISAAssay, String> assayIDPair = nodeWithChildren.getAssayWithOpenBISReference();
 
     System.out.println("Creating assay...");
     String assayID = addAssay(assayIDPair.getKey());

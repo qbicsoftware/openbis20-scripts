@@ -57,4 +57,15 @@ public class DatasetWithProperties {
   public Date getRegistrationDate() {
     return dataset.getRegistrationDate();
   }
+
+  /**
+   * Returns sample ID or experiment ID, if Dataset has no sample.
+   */
+  public String getClosestSourceID() {
+    if(dataset.getSample()!=null) {
+      return dataset.getSample().getIdentifier().getIdentifier();
+    } else {
+      return getExperiment().getIdentifier().getIdentifier();
+    }
+  }
 }

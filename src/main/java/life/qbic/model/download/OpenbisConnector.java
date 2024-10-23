@@ -127,7 +127,6 @@ public class OpenbisConnector {
 
   private static void copyInputStreamToFile(InputStream inputStream, File file)
       throws IOException {
-    System.err.println(file.getPath());
     try (FileOutputStream outputStream = new FileOutputStream(file, false)) {
       int read;
       byte[] bytes = new byte[8192];
@@ -469,6 +468,8 @@ public class OpenbisConnector {
     DataSetFetchOptions dataSetFetchOptions = new DataSetFetchOptions();
     dataSetFetchOptions.withType();
     dataSetFetchOptions.withRegistrator();
+    dataSetFetchOptions.withExperiment();
+    dataSetFetchOptions.withSample();
     SampleFetchOptions sampleFetchOptions = new SampleFetchOptions();
     sampleFetchOptions.withProperties();
     sampleFetchOptions.withType().withPropertyAssignments().withPropertyType();
@@ -662,6 +663,8 @@ public class OpenbisConnector {
     DataSetFetchOptions dataSetFetchOptions = new DataSetFetchOptions();
     dataSetFetchOptions.withType();
     dataSetFetchOptions.withRegistrator();
+    dataSetFetchOptions.withExperiment();
+    dataSetFetchOptions.withSample();
     SampleFetchOptions fetchOptions = new SampleFetchOptions();
     fetchOptions.withProperties();
     fetchOptions.withType().withPropertyAssignments().withPropertyType();

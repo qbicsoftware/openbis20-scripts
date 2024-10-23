@@ -250,7 +250,7 @@ The script will try to find the provided **openbis ID** in experiments, samples 
 fetch any missing information to create a SEEK node containing at least one assay (when an
 experiment without samples and datasets is specified).
 
-The seek-study needs to be provides to attach the assay. TODO: This information is also used to 
+The seek-study needs to be provided to attach the assay. TODO: This information is also used to 
 decide if the node(s) should be updated (if they exist for the provided study) or created anew.
 
 Similarly, the title of the project in SEEK where nodes should be added, can either be provided via 
@@ -291,7 +291,7 @@ least one sample attribute is different in openBIS and SEEK
 
 **Example command:**
 
-`java -jar target/openbis-scripts-1.0.0-jar-with-dependencies.jar openbis-to-seek /MYSPACE/PROJECTY/00_P_INFO_691 mystudy -d -config config.txt --openbis-pw --seek-pw`
+`java -jar scripts.jar openbis-to-seek /MYSPACE/PROJECTY/00_P_INFO_691 mystudy -d -config config.txt --openbis-pw --seek-pw`
 
 **Example output:**
 
@@ -313,5 +313,78 @@ least one sample attribute is different in openBIS and SEEK
     Updating nodes...
     Mismatch found in Gender attribute of /MYSPACE/PROJECTY/00_P_INFO_691. Sample will be updated.
     http://localhost:3000/assays/64 was successfully updated.
+
+#### RO-Crates
+
+While the creation of RO-Crates is not fully implemented, the command creates a folder and metadata
+structure based on OpenBIS experiment, sample and dataset information. The command works similarly
+to the OpenBIS to Seek command, with the difference that no SEEK instance and fewer mapping
+parameters need to be provided (there will be no references to existing study or project objects in
+SEEK).
+
+The script will try to find the provided **openbis ID** in experiments, samples or datasets and
+fetch any missing information to create a folder structure in the provided **ro-path** containing at
+least one assay's information (when an experiment without samples and datasets is specified).
+
+Assets (files and their ISA metadata) are stored in a folder named like the openBIS dataset code
+they are part of, which is either the subfolder of the experiment (assay), or the subfolder of a
+sample, depending on where the dataset was attached in openBIS.
+
+Info in the created asset .jsons always links back to the openBIS path of the respective dataset.
+The data itself can be downloaded into the structure using the '-d' flag.
+
+To completely exclude some dataset information from being transferred, a file ('--blacklist')
+containing dataset codes (from openBIS) can be specified. //TODO do this for samples/sample types
+
+**Example command:**
+
+`java -jar scripts.jar ro-crate /TEMP_PLAYGROUND/TEMP_PLAYGROUND/TEST_PATIENTS1 my-ro-crate -config config.txt --openbis-pw -d`
+
+**Example output:**
+
+    reading config
+    Transfer openBIS -> RO-crate started.
+    Provided openBIS object: /TEMP_PLAYGROUND/TEMP_PLAYGROUND/TEST_PATIENTS1
+    Pack datasets into crate? true
+    Connecting to openBIS...
+    Searching for specified object in openBIS...
+    Search successful.
+    Collecting information from openBIS...
+    Translating openBIS structure to ISA structure...
+    Writing assay json for /TEMP_PLAYGROUND/TEMP_PLAYGROUND/TEST_PATIENTS1.
+    Writing sample json for /TEMP_PLAYGROUND/TEMP_PLAYGROUND/00_P_INFO_670490.
+    Writing sample json for /TEMP_PLAYGROUND/TEMP_PLAYGROUND/00_P_INFO_670491.
+    Writing asset json for file in dataset 20241014205813459-689089.
+    Downloading dataset file to asset folder.
+    Writing asset json for file in dataset 20241014210001025-689090.
+    Downloading dataset file to asset folder.
+    Writing asset json for file in dataset 20241014205813459-689089.
+    Downloading dataset file to asset folder.
+    Writing asset json for file in dataset 20241021191109163-689109.
+    Downloading dataset file to asset folder.
+    ...
+
+**Creates structure:**
+
+    my-ro-crate
+    └── TEMP_PLAYGROUND_TEMP_PLAYGROUND_TEST_PATIENTS1
+        ├── 20241021125328024-689105
+        │        ├── README.md
+        │        └── README.md.json
+        ├── TEMP_PLAYGROUND_TEMP_PLAYGROUND_00_P_INFO_670490
+        │        └── TEMP_PLAYGROUND_TEMP_PLAYGROUND_00_P_INFO_670490.json
+        ├── TEMP_PLAYGROUND_TEMP_PLAYGROUND_00_P_INFO_670491
+        │        ├── 20241014210317842-689092
+        │        │       ├── scripts-new.jar
+        │        │       └── scripts-new.jar.json
+        │        ├── 20241021173011602-689108
+        │        │       └── smol_petab
+        │        │           ├── metaInformation.yaml
+        │        │           └── metaInformation.yaml.json
+        │        ├── 20241021191109163-689109
+        │        │       ├── testfile_100
+        │        │       └── testfile_100.json
+        │        └── TEMP_PLAYGROUND_TEMP_PLAYGROUND_00_P_INFO_670491.json
+        └── TEMP_PLAYGROUND_TEMP_PLAYGROUND_TEST_PATIENTS1.json
 
 ## Caveats and Future Options
