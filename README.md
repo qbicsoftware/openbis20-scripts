@@ -183,7 +183,7 @@ address) and their password, have to be provided.
 In order to interact with openBIS (transfer of data and metadata), the respective credentials need 
 to be provided, as well.
 
-**Everything but the passwords can be provided via the config file (config.txt):**
+**Everything but the passwords can be provided via the config file (e.g. config.txt):**
 
 * as=https://my-openbis-instance.de/openbis/openbis
 * dss=https://my-openbis-instance.de/datastore_server
@@ -203,6 +203,34 @@ section **Transferring Sample Types to SEEK**).
 **Its name can be specified in the config:**
 
 * seek_openbis_sample_title=openBIS Name
+
+In order to create certain objects in SEEK, user-provided mappings need to be provided via property
+files placed in the same folder as the .jar. These are:
+
+**experiment_type_to_assay_class.properties**
+
+Here, openBIS experiment type codes are mapped to the assay class needed to create assay objects in 
+SEEK. Example entries:
+
+    PARAMETER_ESTIMATION=EXP
+    MASS_SPECTROMETRY_EXPERIMENT=EXP
+
+**experiment_type_to_assay_type.properties**
+
+Here, openBIS experiment type codes are mapped to the assay type property needed to create assay 
+objects in SEEK. Example entry:
+
+    MASS_SPECTROMETRY_EXPERIMENT=http://jermontology.org/ontology/JERMOntology#Proteomics
+
+Other fitting assay types can be found using the JERM ontology browser:
+https://bioportal.bioontology.org/ontologies/JERM/?p=classes&conceptid=http%3A%2F%2Fjermontology.org%2Fontology%2FJERMOntology%23Experimental_assay_type&lang=en
+
+**dataset_type_to_asset_type.properties**
+
+Here, openBIS dataset type codes are mapped to the asset type created in SEEK. Example entries:
+
+    SOURCE_CODE=documents
+    UNKNOWN=data_files
 
 Refer to the help of the respective command or the examples below for more details.
 
