@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<properties>
+	<entry type="INTEGER">
+		<seek_id>4</seek_id>
+		<seek_title>Integer</seek_title>
+		<seek_type>Integer</seek_type>
+	</entry>
+	<entry type="VARCHAR">
+		<seek_id>8</seek_id>
+		<seek_title>String</seek_title>
+		<seek_type>String</seek_type>
+	</entry>
+	<entry type="MULTILINE_VARCHAR">
+		<seek_id>7</seek_id>
+		<seek_title>Text</seek_title>
+		<seek_type>Text</seek_type>
+	</entry>
+	<entry type="REAL">
+		<seek_id>3</seek_id>
+		<seek_title>Real number</seek_title>
+		<seek_type>Float</seek_type>
+	</entry>
+	<entry type="TIMESTAMP">
+		<seek_id>1</seek_id>
+		<seek_title>Date time</seek_title>
+		<seek_type>DateTime</seek_type>
+	</entry>
+	<entry type="BOOLEAN">
+		<seek_id>16</seek_id>
+		<seek_title>Boolean</seek_title>
+		<seek_type>Boolean</seek_type>
+	</entry>
+	<entry type="CONTROLLEDVOCABULARY">
+		<seek_id>8</seek_id>
+		<seek_title>String</seek_title>
+		<seek_type>String</seek_type>
+	</entry>
+	<entry type="MATERIAL">
+		<seek_id>8</seek_id>
+		<seek_title>String</seek_title>
+		<seek_type>String</seek_type>
+	</entry>
+	<entry type="HYPERLINK">
+		<seek_id>8</seek_id>
+		<seek_title>String</seek_title>
+		<seek_type>String</seek_type>
+	</entry>
+	<entry type="XML">
+		<seek_id>7</seek_id>
+		<seek_title>Text</seek_title>
+		<seek_type>Text</seek_type>
+	</entry>
+	<entry type="SAMPLE">
+		<seek_id>5</seek_id>
+		<seek_title>Web link</seek_title>
+		<seek_type>String</seek_type>
+	</entry>
+	<entry type="DATE">
+		<seek_id>2</seek_id>
+		<seek_title>Date time</seek_title>
+		<seek_type>Date</seek_type>
+	</entry>
+</properties>
+
