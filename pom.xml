@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>life.qbic</groupId>
     <artifactId>openbis-scripts</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.2</version>
     <name>OpenBis Scripts</name>
     <url>https://github.com/qbicsoftware/openbis20-scripts</url>
     <description>A client software written in Java to query openBIS</description>
